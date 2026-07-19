@@ -1,0 +1,71 @@
+# ============================================================
+# 推荐基准实验 — delta 灵敏度分析
+# 对应论文表4.2格式，但使用新的基准参数
+# ============================================================
+plan_name: "delta灵敏度分析"
+plan_desc: "不同delta值下的GA+BP结果（#DC=3, #Rts=10）"
+
+num_dc: 3
+num_retailers: 10
+population_size: 30
+max_generation: 50
+crossover_rate: 0.7
+mutation_rate: 0.2
+elitism: true
+chromosome_length: 10
+min_w: 0.0
+max_w: 1.0
+carbon_price: 2.0
+carbon_cap: 100000.0
+inv_carbon_coeff: 2.0
+transport_carbon_coeff: 0.01
+fac_carbon_ratio: 0.1
+delta: 3000.0
+service_level: 0.975
+z_alpha: 1.96
+order_fixed_cost: 100.0
+transport_fixed_cost: 100.0
+lead_time: 1.0
+holding_cost: 10.0
+random_seed: 32501
+coord_min: 0.0
+coord_max: 1000.0
+mu_min: 2000.0
+mu_max: 3500.0
+var_min: 10.0
+var_max: 15.0
+fixed_cost_min: 7000.0
+fixed_cost_max: 10000.0
+reserve_price_min: 60.0
+reserve_price_max: 80.0
+supplier_x: 500.0
+supplier_y: 500.0
+verbose: false
+output_dir: results
+log_file: ""
+rc_eps: 1.0e-6
+max_branch_nodes: 10000
+use_dfs: true
+use_sqrt_investment: true
+use_paper_algorithm3: false
+legacy_mode: false
+
+experiments:
+  - name: "delta_1000"
+    delta: 1000.0
+  - name: "delta_3000"
+    delta: 3000.0
+  - name: "delta_5000"
+    delta: 5000.0
+  - name: "delta_7000"
+    delta: 7000.0
+  - name: "delta_9000"
+    delta: 9000.0
+  - name: "delta_11000"
+    delta: 11000.0
+  - name: "delta_13000"
+    delta: 13000.0
+  - name: "delta_15000"
+    delta: 15000.0
+  - name: "delta_17000"
+    delta: 17000.0

@@ -1,0 +1,87 @@
+# ============================================================
+# 第2层：参数配置层 — 推荐的基准配置
+#
+# 基于 delta 灵敏度分析，选用 delta=3000 作为新的基准值。
+# 公式层使用论文标准（分段函数、½δw²√D 等）。
+# ============================================================
+
+# ===== 问题规模 =====
+num_dc: 4
+num_retailers: 30
+
+# ===== 遗传算法参数 =====
+population_size: 30               # 种群大小
+max_generation: 50                # 最大迭代次数
+crossover_rate: 0.7               # 交叉概率
+mutation_rate: 0.2                # 变异概率
+elitism: true                     # 精英保留
+chromosome_length: 10             # w_j编码位数（10位=3位小数）
+min_w: 0.0                        # 减排率下限
+max_w: 1.0                        # 减排率上限
+
+# ===== 碳交易参数 =====
+carbon_price: 2.0                 # p̂：碳配额交易价格
+carbon_cap: 100000.0              # C：初始碳排放配额
+inv_carbon_coeff: 2.0             # ĥ：单位库存年碳排放量
+transport_carbon_coeff: 0.01      # k：运输碳排放系数
+fac_carbon_ratio: 0.1             # f̂_j = f_j * 0.1（设施碳排放系数）
+
+# ===== 减排参数 =====
+delta: 3000.0                     # δ=3000（在√D模型下比5000更平衡）
+
+# ===== 服务水平 =====
+service_level: 0.975              # α：服务水平 97.5%
+z_alpha: 1.96                     # z_α：标准正态分位数
+
+# ===== 成本参数 =====
+order_fixed_cost: 100.0           # F_j：订货固定成本
+transport_fixed_cost: 100.0       # g_j：运输固定成本
+lead_time: 1.0                    # L_j：补货提前期（天）
+holding_cost: 10.0                # h：单位商品年库存持有成本
+
+# ===== 随机种子 =====
+random_seed: 32501
+
+# ===== 数据生成范围 =====
+coord_min: 0.0
+coord_max: 1000.0
+mu_min: 2000.0
+mu_max: 3500.0
+var_min: 10.0
+var_max: 15.0
+fixed_cost_min: 7000.0
+fixed_cost_max: 10000.0
+reserve_price_min: 60.0
+reserve_price_max: 80.0
+supplier_x: 500.0
+supplier_y: 500.0
+
+# ===== 输出控制 =====
+verbose: false
+output_dir: results
+log_file: ""
+
+# ===== 分支定界参数 =====
+rc_eps: 1.0e-6
+max_branch_nodes: 10000
+use_dfs: true
+
+# ===== 公式模型选择 =====
+use_sqrt_investment: true         # true=½δw²√D（论文标准版）
+
+# ===== 定价子问题算法选择 =====
+use_paper_algorithm3: false
+
+# ===== 并行计算参数 =====
+parallel_fitness: true                # 开启fork多进程并行
+num_threads: 0                        # 0=自动检测CPU核心数
+parallel_pricing: true                # 并行求解各DC的定价子问题（纯数学，无CPLEX）
+
+# ===== 提前停止参数 =====
+early_stop: true                      # 是否提前停止GA
+convergence_generations: 12           # 连续N代不提升则停止
+convergence_tolerance: 0.0005         # 提升阈值（相对值）
+
+# ===== 兼容模式 =====
+legacy_mode: false
+run_mode: "ga"
