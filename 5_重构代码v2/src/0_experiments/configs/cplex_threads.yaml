@@ -1,0 +1,36 @@
+plan_name: "cplex_threads"
+plan_desc: "验证CPLEX多线程:GA串行下放开RMP求解线程数,解须与单线程现状一致,考察CG里CPLEX求解耗时是否下降"
+
+# ===== 公共基准参数(所有实验条目继承,可被条目覆盖) =====
+num_dc: 10
+num_retailers: 30
+population_size: 30
+max_generation: 50
+crossover_rate: 0.7
+mutation_rate: 0.2
+chromosome_length: 10
+carbon_price: 2.0
+carbon_cap: 100000.0
+delta: 3000
+holding_cost: 10.0
+random_seed: 32501
+use_sqrt_investment: true
+early_stop: false          # 关早停,跑满50代,便于与单线程现状逐点对齐
+parallel_fitness: false    # GA串行 => 无fork过度订阅风险,RMP可安全放开多线程
+parallel_pricing: false    # 定价保持串行(方案B已验证小规模并行不划算)
+
+experiments:
+  # 基准: CPLEX单线程(现状), 作为解与耗时参照
+  - name: "Cplex1"
+    pricing_algorithm: 0
+    cplex_threads: 1
+
+  # 待验证: CPLEX 4线程求RMP LP
+  - name: "Cplex4"
+    pricing_algorithm: 0
+    cplex_threads: 4
+
+  # 待验证: CPLEX 8线程求RMP LP
+  - name: "Cplex8"
+    pricing_algorithm: 0
+    cplex_threads: 8

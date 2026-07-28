@@ -1,0 +1,30 @@
+plan_name: "矩阵 40x150 w=0.8"
+plan_desc: "40DC x 150R 单个体单次求解 固定w=0.8"
+
+num_dc: 40
+num_retailers: 150
+population_size: 1
+max_generation: 1
+crossover_rate: 0.7
+mutation_rate: 0.2
+chromosome_length: 10
+carbon_price: 2.0
+carbon_cap: 100000.0
+delta: 3000
+holding_cost: 10.0
+random_seed: 32501
+min_w: 0.8
+max_w: 0.8
+use_sqrt_investment: true
+early_stop: false
+parallel_fitness: false
+max_cg_iterations: 300
+cg_early_stop: true
+cg_stall_tolerance: 0.0001
+cg_stall_iterations: 15
+
+experiments:
+  - name: "S1_Serial"
+    parallel_pricing: false
+    pricing_threads: 4
+    cplex_threads: 1

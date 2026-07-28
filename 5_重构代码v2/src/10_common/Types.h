@@ -25,23 +25,52 @@ struct CGResult {
     int numColumns = 0;
 };
 
+/**
+ * 分支约束：对 DC-零售商对 (dcIndex, retailerIndex) 的分配变量 x_ij 分支。
+ *
+ * x_ij = Σ_{k: S_k[i]=1} z_j[k]，表示零售商 i 是否由 DC j 服务。
+ *
+ * value = 1：DC j 必须服务零售商 i（该 DC 上仅允许 S[i]=1 的列）
+ * value = 0：DC j 禁止服务零售商 i（该 DC 上仅允许 S[i]=0 的列）
+ *
+ * 用稳定的 (dcIndex, retailerIndex) 标识变量，而非易变的列池位置索引，
+ * 从根本上保证分支约束在子节点重建列池后仍然有效。
+ */
+struct RetailerBranch {
+    int dcIndex = -1;       // DC 索引 j
+    int retailerIndex = -1;  // 零售商索引 i
+    int value = 0;           // 0 或 1
+};
+
 struct BranchState {
-    std::vector<int> branchId;
-    std::vector<int> lb;
-    std::vector<int> ub;
-    int addSize = 0;
+    std::vector<RetailerBranch> retailerBranches;
     BranchState() = default;
-    BranchState branch(int id_j, int id_S, int value) const {
+
+    /** 派生子节点：在当前约束基础上追加一条 (j, i, value) 约束 */
+    BranchState branchOnRetailer(int dcIndex, int retailerIndex, int value) const {
         BranchState child;
-        child.addSize = addSize + 1;
-        child.branchId = branchId;
-        child.branchId.push_back(id_j);
-        child.branchId.push_back(id_S);
-        child.lb = lb;
-        child.lb.push_back(value);
-        child.ub = ub;
-        child.ub.push_back(value);
+        child.retailerBranches = retailerBranches;
+        RetailerBranch rb;
+        rb.dcIndex = dcIndex;
+        rb.retailerIndex = retailerIndex;
+        rb.value = value;
+        child.retailerBranches.push_back(rb);
         return child;
+    }
+
+    /**
+     * 判断某个 DC j 的服务集合 S 是否满足当前所有分支约束。
+     * 用于初始列过滤和定价列过滤。
+     */
+    bool isColumnFeasible(int dcIndex, const std::vector<int>& S) const {
+        for (const auto& rb : retailerBranches) {
+            if (rb.dcIndex != dcIndex) continue;
+            int served = (rb.retailerIndex < (int)S.size())
+                             ? S[rb.retailerIndex] : 0;
+            if (rb.value == 1 && served != 1) return false;  // 必须服务但未服务
+            if (rb.value == 0 && served != 0) return false;  // 禁止服务但服务了
+        }
+        return true;
     }
 };
 

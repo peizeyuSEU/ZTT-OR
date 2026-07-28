@@ -97,7 +97,35 @@ public:
     // ========== 分支定界参数 ==========
     double rc_eps = 1.0e-6;
     int max_branch_nodes = 10000;
+    int max_cg_iterations = 2000;  // 列生成单次求解的最大迭代次数（防数值抖动死循环）
     bool use_dfs = true;
+
+    // ========== 列生成 tailing-off 早停参数 ==========
+    // 列生成尾部常出现"每轮只加微小改善列"的拖尾现象（tailing-off）。
+    // 当 RMP 目标值连续 cg_stall_iterations 轮相对改善均 < cg_stall_tolerance 时，
+    // 视为已实质收敛并提前终止，避免上万轮无效迭代。
+    bool cg_early_stop = true;            // 是否启用 tailing-off 早停
+    int cg_stall_iterations = 20;         // 连续 N 轮改善不足则停
+    double cg_stall_tolerance = 1.0e-6;   // 目标值相对改善阈值
+
+    // ========== 方案A：对偶价格平滑（Wentges stabilization） ==========
+    // 喂给定价的对偶 = alpha * 上一轮平滑对偶 + (1 - alpha) * 本轮 LP 对偶。
+    // alpha=0 关闭平滑（退化为原始直接用对偶）；只影响列生成路径与收敛速度，不改变 LP 最优值。
+    //
+    // 【默认关闭(0.0)的实测依据】平滑的前提是"对偶来回震荡"，但本问题实测根节点
+    //   对偶/obj 一路单调平稳上升、根本不震荡，此时平滑纯属负担：它让定价子问题
+    //   反复生成同一批列结构，导致列池提前"顶上界假收敛"停在次优 LP，再被迫关平滑
+    //   用真实对偶重新探索，等于把列生成做了两遍。铁证(同解，比轮数)：
+    //     30x100_w00: 开=77轮 vs 关=56轮；20x70_w05: 开=57 vs 关=44；30x100_w05: 开=78 vs 关=60。
+    //   三格无论退化(w=0)还是健康(w=0.5)均是"关平滑"更快 → 默认关闭最优。
+    //   （若某算例确有对偶震荡，可在配置里手动置 alpha>0；届时 02_ColumnGeneration.h
+    //     的假收敛平滑保护会兜底防止 cycling，不会死循环。）
+    double dual_smooth_alpha = 0.0;       // 对偶平滑系数 [0,1)，0=关闭（默认关闭，见上）
+
+    // ========== 方案B：根节点整数启发式（抬 bestLowerBound 加速剪枝） ==========
+    // 根节点 LP 分数解后，用 rounding/贪心构造一个可行整数解作为初始下界，
+    // 使分支定界的剪枝尽早生效。只抬下界，不影响最终全局最优性。
+    bool root_heuristic = true;           // 是否启用根节点整数启发式
 
     // ========== 公式模型选择 ==========
     bool use_sqrt_investment = true;     // true=½δw²√D, false=½βw²（论文标准版）
@@ -105,11 +133,32 @@ public:
     // ========== 定价子问题算法选择 ==========
     bool use_paper_algorithm3 = false;   // true=论文Algorithm3（完整凸包+余弦相似度）
                                          // false=简化凸包枚举（当前算法，更快）
+                                         // 注：保留此字段仅为向后兼容，实际调度以 pricing_algorithm 为准
+
+    // 三方案对比开关：0=Simplified(简化枚举) / 1=Algorithm3(论文精确) / 2=ConvexHull(凸包剪枝)
+    int pricing_algorithm = 0;
+
+    // 每个 DC 每轮定价返回的最多列数（multi-column pricing）。
+    // 默认 1 = 只返回最优 1 列（历史行为，零改变）。
+    // 设为 >1 时，每个 DC 每轮额外返回缓存池中当前对偶下的多个正检验数列，
+    // 一次性向 RMP 注入更多列以压缩大规模列生成的迭代轮数（解不变，仅减轮数）。
+    int pricing_max_cols_per_dc = 1;
 
     // ========== 并行计算参数 ==========
     bool parallel_fitness = false;        // 是否并行评估GA个体
     int num_threads = 0;                  // 线程数（0=自动检测CPU核心数）
     bool parallel_pricing = false;        // 是否并行求解定价子问题
+    // RMP 主问题的 CPLEX 求解线程数（1=单线程，安全默认）。
+    // 注意：当 parallel_fitness=true(GA fork 并行) 时会被强制回退为 1，
+    // 因为 fork 已占满 CPU 核，CPLEX 再开多线程将过度订阅导致死锁。
+    int cplex_threads = 1;
+
+    // 定价子问题并行的线程数上限（每个 BP 实例内部）。默认 4，保持历史行为。
+    // 实际线程数 = min(numDC, pricing_threads, 预算约束)，下限 1。
+    int pricing_threads = 4;
+    // 总核预算：约束 GA 并发进程数 × 定价线程数 <= core_budget，防止吃光服务器核。
+    // 0 = 不限制（退化为历史行为：定价线程 = min(numDC, pricing_threads)）。
+    int core_budget = 0;
 
     // ========== 提前停止参数 ==========
     bool early_stop = false;              // 是否提前停止GA
@@ -445,12 +494,31 @@ private:
         else if (key == "log_file") log_file = value;
         else if (key == "rc_eps") rc_eps = std::stod(value);
         else if (key == "max_branch_nodes") max_branch_nodes = std::stoi(value);
+     else if (key == "max_cg_iterations") max_cg_iterations = std::stoi(value);
+        else if (key == "cg_early_stop") cg_early_stop = toBool(value);
+        else if (key == "cg_stall_iterations") cg_stall_iterations = std::stoi(value);
+        else if (key == "cg_stall_tolerance") cg_stall_tolerance = std::stod(value);
+        else if (key == "dual_smooth_alpha") dual_smooth_alpha = std::stod(value);
+        else if (key == "root_heuristic") root_heuristic = toBool(value);
         else if (key == "use_dfs") use_dfs = toBool(value);
         else if (key == "use_sqrt_investment") use_sqrt_investment = toBool(value);
-        else if (key == "use_paper_algorithm3") use_paper_algorithm3 = toBool(value);
+        else if (key == "use_paper_algorithm3") {
+            use_paper_algorithm3 = toBool(value);
+            // 向后兼容：旧配置只设 use_paper_algorithm3 时，同步映射到 pricing_algorithm
+            pricing_algorithm = use_paper_algorithm3 ? 1 : 0;
+        }
+        else if (key == "pricing_algorithm") {
+            pricing_algorithm = std::stoi(value);
+            // 反向同步布尔字段，便于旧代码路径读取
+            use_paper_algorithm3 = (pricing_algorithm == 1);
+        }
+        else if (key == "pricing_max_cols_per_dc") pricing_max_cols_per_dc = std::stoi(value);
         else if (key == "parallel_fitness") parallel_fitness = toBool(value);
         else if (key == "num_threads") num_threads = std::stoi(value);
         else if (key == "parallel_pricing") parallel_pricing = toBool(value);
+        else if (key == "cplex_threads") cplex_threads = std::stoi(value);
+        else if (key == "pricing_threads") pricing_threads = std::stoi(value);
+        else if (key == "core_budget") core_budget = std::stoi(value);
         else if (key == "early_stop") early_stop = toBool(value);
         else if (key == "convergence_generations") convergence_generations = std::stoi(value);
         else if (key == "convergence_tolerance") convergence_tolerance = std::stod(value);

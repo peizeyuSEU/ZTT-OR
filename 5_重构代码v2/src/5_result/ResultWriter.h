@@ -5,6 +5,7 @@
 #include "../10_common/Instance.h"
 #include "../9_postprocessor/01_PostProcessor.h"
 #include "../3_monitor/Monitor.h"
+#include "../10_common/Config.h"
 #include <string>
 #include <fstream>
 #include <iostream>
@@ -25,9 +26,13 @@ public:
                      const std::vector<double>& w,
                      double profit, double emission,
                      double solveTime, int dcOpen, int rtServed,
-                     int branchNodes, int gaGenerations = 0) {
+                     int branchNodes, int gaGenerations = 0,
+                     double carbonCap = 0.0) {
         result_.totalProfit = profit;
         result_.carbonEmission = emission;
+        result_.carbonCap = carbonCap;
+        result_.ePlus = emission > carbonCap ? emission - carbonCap : 0.0;
+        result_.eMinus = carbonCap > emission ? carbonCap - emission : 0.0;
         result_.solveTime = solveTime;
         result_.numDCsOpen = dcOpen;
         result_.numRtsServed = rtServed;
@@ -40,6 +45,9 @@ public:
         result_.convergence = monitor.convergenceHistory();
         // 收集完整时间分布
         result_.timing = monitor.buildTimingReport();
+        // 收集完整报告文本（与终端/run.log 统一格式）
+        result_.timingReportText = monitor.formatTimingReport();
+        result_.summaryText = monitor.formatSummary();
     }
 
     void setMeta(const std::string& name, int numDC, int numRt,
@@ -60,7 +68,7 @@ public:
     /** 保存完整决策方案报告 */
     void saveReport(const std::string& path, const Instance& inst,
                     const std::vector<double>& w,
-                    double baseProfit) {
+                    double baseProfit, const Config& config) {
         std::ofstream file(path);
         if (!file.is_open()) {
             std::cerr << "[ResultWriter] 无法写入 " << path << std::endl;
@@ -71,6 +79,59 @@ public:
         file << "问题规模:\n";
         file << "  DC数量: " << inst.numDC << "\n";
         file << "  零售商数量: " << inst.numRetailer << "\n\n";
+
+        // ===== 运行配置 =====
+        file << "运行配置:\n";
+        // 并行 / 串行模式
+        bool is_parallel = config.parallel_fitness && config.num_threads != 1;
+        file << "  适应度评估模式: "
+             << (is_parallel ? "并行 (fork 多进程)" : "串行") << "\n";
+        if (is_parallel) {
+            file << "  并行线程/进程数: " << config.num_threads
+                 << (config.num_threads == 0 ? " (0=自动检测CPU核心数)" : "") << "\n";
+        }
+        file << "  定价子问题并行: "
+             << (config.parallel_pricing ? "是" : "否") << "\n";
+        file << "  随机种子: " << config.random_seed << "\n";
+        // 遗传算法参数
+        file << "  [遗传算法]\n";
+        file << "    种群规模: " << config.population_size << "\n";
+        file << "    最大迭代代数: " << config.max_generation << "\n";
+        file << "    交叉率: " << config.crossover_rate << "\n";
+        file << "    变异率: " << config.mutation_rate << "\n";
+        file << "    染色体长度: " << config.chromosome_length << "\n";
+        file << "    GA早停: " << (config.early_stop ? "启用" : "关闭");
+        if (config.early_stop) {
+            file << " (连续 " << config.convergence_generations
+                 << " 代相对改善 < " << config.convergence_tolerance << " 则停)";
+        }
+        file << "\n";
+        // 列生成参数
+        file << "  [列生成]\n";
+        file << "    最大迭代次数: " << config.max_cg_iterations << "\n";
+        file << "    reduced cost 阈值: " << config.rc_eps << "\n";
+        file << "    tailing-off 早停: "
+             << (config.cg_early_stop ? "启用" : "关闭");
+        if (config.cg_early_stop) {
+            file << " (连续 " << config.cg_stall_iterations
+                 << " 轮相对改善 < " << config.cg_stall_tolerance << " 则停)";
+        }
+        file << "\n";
+        // 模型开关
+        file << "  [模型]\n";
+        file << "    减排系数 delta: " << config.delta << "\n";
+        file << "    投资函数: "
+             << (config.use_sqrt_investment ? "1/2·delta·w^2·sqrt(D)"
+                                            : "1/2·beta·w^2 (论文标准版)")
+             << "\n";
+        const char* algo_name =
+            (config.pricing_algorithm == 1)
+                ? "论文 Algorithm3 (完整凸包+余弦相似度)"
+                : (config.pricing_algorithm == 2)
+                      ? "ConvexHull 凸包剪枝 (Andrew 单调链+边界点对)"
+                      : "Simplified 简化枚举 (全点对 above/below)";
+        file << "    定价算法: " << algo_name << "\n\n";
+
 
         file << "最优解汇总:\n";
         file << "  总利润: " << std::fixed << std::setprecision(2)
@@ -138,35 +199,9 @@ public:
         file << "  可出售 e-: " << e_minus << "\n";
         file << "  净碳交易成本: " << inst.p * (result_.carbonEmission - inst.C) << "\n\n";
 
-        // 时间分布
-        file << "时间分布:\n";
-        const auto& t = result_.timing;
-        auto printTimingLine = [&file](const std::string& name, double val, double total) {
-            if (total > 0) {
-                file << "  " << std::left << std::setw(24) << name
-                     << std::right << std::setw(12) << std::fixed << std::setprecision(4) << val << " s ("
-                     << std::setw(5) << std::setprecision(1) << (val / total * 100.0) << "%)" << "\n";
-            }
-        };
-        file << "  求解总时间: " << t.solveTime << " s (100%)\n";
-        printTimingLine("GA 搜索", t.gaTime, t.solveTime);
-        printTimingLine("  ├─ 选择", t.gaSelectTime, t.solveTime);
-        printTimingLine("  ├─ 交叉", t.gaCrossoverTime, t.solveTime);
-        printTimingLine("  ├─ 变异", t.gaMutateTime, t.solveTime);
-        printTimingLine("  ├─ 解码", t.gaDecodeTime, t.solveTime);
-        printTimingLine("  ├─ 适应度评估", t.gaEvalTime, t.solveTime);
-        printTimingLine("  │  └─ 分支定价(BP)", t.bpTime, t.solveTime);
-        printTimingLine("  │     ├─ 列生成(CG)", t.cgTime, t.solveTime);
-        printTimingLine("  │     │  ├─ CPLEX构建", t.cplexBuildTime, t.solveTime);
-        printTimingLine("  │     │  ├─ CPLEX求解", t.cplexSolveTime, t.solveTime);
-        printTimingLine("  │     │  └─ 定价子问题(PS)", t.pricingTime, t.solveTime);
-        printTimingLine("  │     └─ 分支定界(BB)", t.bbTime, t.solveTime);
-        printTimingLine("  后处理", t.postTime, t.solveTime);
-        printTimingLine("  日志输出", t.logTime, t.solveTime);
-        file << "  算法统计: 列生成迭代=" << result_.totalCGIterations
-             << ", 总列数=" << result_.totalColumnsGenerated
-             << ", 分支节点=" << result_.totalBranchNodes
-             << ", 剪枝=" << result_.prunedNodes << "\n";
+        // 时间分布 + 求解统计（复用 Monitor 生成的文本，与终端/run.log 完全统一）
+        file << result_.timingReportText << "\n\n";
+        file << result_.summaryText << "\n";
 
         file.close();
     }
@@ -207,6 +242,8 @@ public:
              << std::setw(6) << "#Rts"
              << std::setw(16) << "总利润"
              << std::setw(14) << "碳排放"
+             << std::setw(12) << "e+购买"
+             << std::setw(12) << "e-出售"
              << std::setw(10) << "时间(s)"
              << std::setw(8) << "#DC开"
              << std::setw(8) << "#R服务"
@@ -217,7 +254,7 @@ public:
              << std::setw(10) << "CG时间"
              << std::setw(10) << "PS时间"
              << std::setw(10) << "BB时间" << std::endl;
-        file << std::string(150, '-') << std::endl;
+        file << std::string(174, '-') << std::endl;
 
         for (const auto& r : results) {
             file << std::left << std::fixed << std::setprecision(2);
@@ -226,6 +263,8 @@ public:
                  << std::setw(6) << r.numRetailers
                  << std::setw(16) << r.totalProfit
                  << std::setw(14) << r.carbonEmission
+                 << std::setw(12) << r.ePlus
+                 << std::setw(12) << r.eMinus
                  << std::setw(10) << r.solveTime
                  << std::setw(8) << r.numDCsOpen
                  << std::setw(8) << r.numRtsServed

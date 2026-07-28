@@ -118,6 +118,10 @@ public:
     size_t active() {
         return activeWorkers.load();
     }
+
+    size_t size() const {
+        return workers.size();
+    }
 };
 
 #endif // THREAD_POOL_H

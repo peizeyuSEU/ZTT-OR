@@ -1,0 +1,42 @@
+plan_name: "并行策略对比"
+plan_desc: "固定问题规模,对比4种并行策略(全串/仅GA并/仅定价并/双开)的墙钟耗时"
+
+# ===== 公共基准参数(所有实验条目继承,可被条目覆盖) =====
+num_dc: 10
+num_retailers: 30
+population_size: 30
+max_generation: 50
+crossover_rate: 0.7
+mutation_rate: 0.2
+chromosome_length: 10
+carbon_price: 2.0
+carbon_cap: 100000.0
+delta: 3000
+holding_cost: 10.0
+random_seed: 32501
+use_sqrt_investment: true
+early_stop: false          # 关掉早停,保证每条跑满50代,耗时可比
+
+experiments:
+  # 策略A: 全串行(基准) —— GA串行 + 定价串行
+  - name: "A_全串行"
+    parallel_fitness: false
+    parallel_pricing: false
+
+  # 策略B: 仅GA并行 —— 每个个体一个进程,内部定价串行
+  - name: "B_仅GA并行"
+    parallel_fitness: true
+    num_threads: 0
+    parallel_pricing: false
+
+  # 策略C: 仅定价并行 —— GA串行,每个DC一个定价线程
+  - name: "C_仅定价并行"
+    parallel_fitness: false
+    parallel_pricing: true
+    num_threads: 0
+
+  # 策略D: 双开(嵌套并行) —— GA并行 x 定价并行,预期线程争抢负优化
+  - name: "D_双开嵌套"
+    parallel_fitness: true
+    parallel_pricing: true
+    num_threads: 0

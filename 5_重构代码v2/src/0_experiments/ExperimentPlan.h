@@ -38,6 +38,10 @@ public:
         planDesc_ = tempConfig.plan_desc;
         entries_ = tempConfig.experiments;
 
+        // 保存 yaml 顶层公共参数（num_dc/population_size/early_stop 等）。
+        // 无 base_config 时，expand() 以它为基准，避免公共参数被默认值覆盖。
+        topLevelConfig_ = tempConfig;
+
         // 检查是否有 base_config 字段（通过重新读取 YAML 手动解析）
         std::ifstream file(yamlPath);
         if (!file.is_open()) return false;
@@ -78,8 +82,13 @@ public:
             Config cfg;
 
             if (!baseConfigPath_.empty()) {
-                // 从 base_config 复制
+                // 优先从 base_config 复制
                 cfg = baseConfig_;
+            } else {
+                // 无 base_config：以 yaml 顶层公共参数为基准，
+                // 保证 num_dc/population_size/early_stop 等公共字段被继承，
+                // 而不是退化成 Config 的默认值（此前 bug：所有条目都跑默认小规模）。
+                cfg = topLevelConfig_;
             }
 
             // 应用实验条目的覆盖
@@ -124,6 +133,7 @@ public:
 private:
     std::string baseConfigPath_;
     Config baseConfig_;
+    Config topLevelConfig_;   // yaml 顶层公共参数（无 base_config 时作 expand 基准）
     std::vector<ExperimentEntry> entries_;
     std::string planName_;
     std::string planDesc_;

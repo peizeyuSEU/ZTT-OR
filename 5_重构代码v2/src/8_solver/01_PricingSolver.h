@@ -14,7 +14,28 @@
 #include <limits>
 #include <chrono>
 #include <unordered_set>
+#include <set>
+#include <cstdint>
 #include <string>
+#include <array>
+
+/**
+ * bitmask（uint64 字数组）哈希器
+ *
+ * 定价子问题两点枚举的候选去重用。std::vector<uint64_t> 无标准哈希，
+ * 这里用 FNV-1a 风格的 hash_combine 逐字混合，使其可作 unordered_set 的键。
+ * 相比 std::set 的红黑树 O(log n) 有序插入，O(1) 均摊且缓存更友好。
+ */
+struct MaskHash {
+    std::size_t operator()(const std::vector<uint64_t>& mask) const noexcept {
+        std::size_t h = 1469598103934665603ULL;  // FNV offset basis
+        for (uint64_t word : mask) {
+            h ^= static_cast<std::size_t>(word);
+            h *= 1099511628211ULL;  // FNV prime
+        }
+        return h;
+    }
+};
 
 /**
  * 定价子问题求解器（Pricing Problem）
@@ -49,17 +70,20 @@ private:
         double variance;   // 方差 σ²_i
     };
 
-    // ===== 方案1优化：定价子问题缓存 =====
-    // 对每个DC j，缓存最近一次找到的最优列
-    // 在下一次求解时，先用缓存列计算检验数，如果仍 > 0 则直接返回
+    // ===== 方案1优化：定价子问题多列缓存 =====
+    // 对每个DC j，缓存最近找到的 K 个好列（不再只存1列）。
+    // 对偶价格每轮仅微变，上几轮的好列本轮往往仍是正检验数列，
+    // 快路径遍历这 K 列取 RC 最大者命中，即可跳过整段凸包枚举。
     struct CachedColumn {
         std::vector<int> S;     // 服务集合
         double p_j;             // 批发价
         double reducedCost;     // 当时的检验数
         int iteration;          // 缓存时的迭代号（用于LRU淘汰）
     };
-    std::vector<CachedColumn> cachedBestCols;  // 每个DC一个
-    int pricingIterCounter = 0;                // 全局迭代计数器
+    // 每个DC一个列表，最多保留 kMaxCachedCols 列，满则淘汰最旧（iteration 最小）
+    static const int kMaxCachedCols = 5;
+    std::vector<std::vector<CachedColumn>> cachedBestCols;  // 每个DC一个多列列表
+    int pricingIterCounter = 0;                             // 全局迭代计数器
 
 public:
     PricingSolver() : inst(nullptr), config(nullptr), logger(nullptr),
@@ -69,12 +93,7 @@ public:
 
     void setInstance(const Instance& instance) {
         inst = &instance;
-        cachedBestCols.resize(inst->numDC);
-        // 初始化为空
-        for (auto& col : cachedBestCols) {
-            col.S.clear();
-            col.iteration = -1;
-        }
+        cachedBestCols.assign(inst->numDC, std::vector<CachedColumn>());
     }
     void setConfig(const Config& cfg) { config = &cfg; }
     void setRCEps(double eps) { rc_eps = eps; }
@@ -86,9 +105,8 @@ public:
     void resetStats() {
         pricingTime = 0.0;
         pricingIterCounter = 0;
-        for (auto& col : cachedBestCols) {
-            col.S.clear();
-            col.iteration = -1;
+        for (auto& colList : cachedBestCols) {
+            colList.clear();
         }
     }
 
@@ -99,7 +117,8 @@ public:
      * @param dual 对偶变量数组（长度 = 零售商数 + DC数）
      * @return 最优列（S, p_j）和检验数
      */
-    PricingResult solve(int j, const std::vector<double>& dual) {
+    PricingResult solve(int j, const std::vector<double>& dual,
+                        const BranchState* branch = nullptr) {
         auto start = std::chrono::steady_clock::now();
         pricingIterCounter++;
 
@@ -107,28 +126,41 @@ public:
         result.dcIndex = j;
         result.reducedCost = -DBL_MAX;
 
-        // ===== 缓存检查：先检查之前找到的列在当前dual下是否仍为正检验数 =====
+        // ===== 快路径：遍历该DC缓存的多列，取当前dual下RC最大且>阈值者直接返回 =====
+        // 分支约束下：缓存列必须仍满足约束，否则不能复用。
         bool cacheHit = false;
-        if (j < (int)cachedBestCols.size() && !cachedBestCols[j].S.empty()) {
-            const auto& cached = cachedBestCols[j];
+        if (j < (int)cachedBestCols.size() && !cachedBestCols[j].empty()) {
             ObjectiveFormula objFormula;
-            double profit = objFormula.columnProfit(*inst, j, cached.S, cached.p_j,
-                (j < (int)inst->w.size()) ? inst->w[j] : 0.0);
-            double rc = profit;
-            for (int i = 0; i < inst->numRetailer; i++) {
-                if (cached.S[i] == 1) rc -= dual[i];
+            double bestRc = rc_eps;   // 只接受严格大于阈值的列
+            int bestPos = -1;
+            for (int c = 0; c < (int)cachedBestCols[j].size(); c++) {
+                const auto& cached = cachedBestCols[j][c];
+                if (branch != nullptr && !branch->isColumnFeasible(j, cached.S)) {
+                    continue;  // 分支约束下不可行，跳过
+                }
+                double profit = objFormula.columnProfit(*inst, j, cached.S, cached.p_j,
+                    (j < (int)inst->w.size()) ? inst->w[j] : 0.0);
+                double rc = profit;
+                for (int i = 0; i < inst->numRetailer; i++) {
+                    if (cached.S[i] == 1) rc -= dual[i];
+                }
+                rc -= dual[inst->numRetailer + j];
+                if (rc > bestRc) {
+                    bestRc = rc;
+                    bestPos = c;
+                }
             }
-            rc -= dual[inst->numRetailer + j];
-            if (rc > rc_eps) {
-                // 缓存列仍然有效
-                result.reducedCost = rc;
-                result.optimal_pj = cached.p_j;
-                result.optimal_S = cached.S;
+            if (bestPos >= 0) {
+                // 命中：复用该缓存列，跳过整段凸包枚举
+                auto& hit = cachedBestCols[j][bestPos];
+                result.reducedCost = bestRc;
+                result.optimal_pj = hit.p_j;
+                result.optimal_S = hit.S;
                 result.dcIndex = j;
                 cacheHit = true;
-                // 更新缓存的检验数和迭代号
-                cachedBestCols[j].reducedCost = rc;
-                cachedBestCols[j].iteration = pricingIterCounter;
+                // 更新命中列的检验数与迭代号（用于LRU）
+                hit.reducedCost = bestRc;
+                hit.iteration = pricingIterCounter;
             }
         }
 
@@ -146,25 +178,95 @@ public:
             );
 
             // 对每个候选价格求解最优服务集合，取RC最大的
-            bool usePaperAlgo = config ? config->use_paper_algorithm3 : false;
-            for (double price : candidate_prices) {
-                PricingResult subResult;
-                if (usePaperAlgo) {
-                    subResult = solveForPrice_Algorithm3(j, price, dual);
-                } else {
-                    subResult = solveForPrice_Simplified(j, price, dual);
+            // 【优化3】严格无损上界剪枝：先算 O(n) 的 RC 上界，
+            //   若上界 ≤ 当前已找到的最优 RC，则该价不可能更优，
+            //   直接跳过昂贵的凸包枚举。上界忽略非线性库存成本
+            //   （恒正、被减去）故偏高，仍 ≥ 真实 RC，剪枝不漏最优解。
+            // 定价算法三值选择：0=Simplified / 1=Algorithm3 / 2=ConvexHull
+            int algoMode = config ? config->pricing_algorithm : 0;
+            // 上界剪枝仅在非论文精确版启用（Algorithm3 需完整枚举以保精确对比）
+            bool enableUpperBound = (algoMode != 1);
+            // 【优化4：上界降序早停】按 RC 上界降序遍历候选价格。
+            //   上界剪枝的效果依赖尽早建立高 bestRC——先处理上界最高的价格，
+            //   能更快抬高 result.reducedCost，从而剪掉更多低上界价格，
+            //   减少昂贵的凸包/单纯形枚举调用。严格无损：只改遍历顺序，
+            //   最终仍取全局 RC 最大的列。同时复用此处算得的上界，避免循环内
+            //   重复调用 computePriceUpperBound。Algorithm3 保持原枚举顺序。
+            if (enableUpperBound) {
+                // 【优化5】价格无关基底预算一次，供本轮所有候选价格复用，
+                //   省掉 computePriceUpperBound / solveForPrice_Simplified 内
+                //   对分段运输公式的重复计算。纯栈上局部，无并发风险。
+                FeatureBase featBase = computeFeatureBase(j, dual);
+                std::vector<std::pair<double, double>> priced;  // (上界, 价格)
+                priced.reserve(candidate_prices.size());
+                for (double price : candidate_prices) {
+                    priced.emplace_back(
+                        computePriceUpperBound(j, price, dual, &featBase), price);
                 }
-                if (subResult.reducedCost > result.reducedCost) {
-                    result = subResult;
+                std::sort(priced.begin(), priced.end(),
+                          [](const std::pair<double, double>& a,
+                             const std::pair<double, double>& b) {
+                              return a.first > b.first;  // 上界降序
+                          });
+                for (const auto& pr : priced) {
+                    if (pr.first <= result.reducedCost) {
+                        // 上界降序遍历：当前价上界已不优，则后续价上界更低，
+                        // 全部不可能更优，直接终止（早停）。
+                        break;
+                    }
+                    double price = pr.second;
+                    PricingResult subResult;
+                    if (algoMode == 2) {
+                        subResult = solveForPrice_ConvexHull(j, price, dual, branch);
+                    } else {
+                        subResult = solveForPrice_Simplified(j, price, dual, branch, &featBase);
+                    }
+                    if (subResult.reducedCost > result.reducedCost) {
+                        result = subResult;
+                    }
+                }
+            } else {
+                for (double price : candidate_prices) {
+                    PricingResult subResult =
+                        solveForPrice_Algorithm3(j, price, dual, branch);
+                    if (subResult.reducedCost > result.reducedCost) {
+                        result = subResult;
+                    }
                 }
             }
 
-            // 如果找到了正检验数列，更新缓存
+            // 如果找到了正检验数列，加入多列缓存（去重 + LRU 淘汰）
             if (result.reducedCost > rc_eps && j < (int)cachedBestCols.size()) {
-                cachedBestCols[j].S = result.optimal_S;
-                cachedBestCols[j].p_j = result.optimal_pj;
-                cachedBestCols[j].reducedCost = result.reducedCost;
-                cachedBestCols[j].iteration = pricingIterCounter;
+                auto& colList = cachedBestCols[j];
+                // 去重：若已有相同列(相同S且相同p_j)，仅刷新其检验数与迭代号
+                bool duplicate = false;
+                for (auto& c : colList) {
+                    if (c.p_j == result.optimal_pj && c.S == result.optimal_S) {
+                        c.reducedCost = result.reducedCost;
+                        c.iteration = pricingIterCounter;
+                        duplicate = true;
+                        break;
+                    }
+                }
+                if (!duplicate) {
+                    CachedColumn nc;
+                    nc.S = result.optimal_S;
+                    nc.p_j = result.optimal_pj;
+                    nc.reducedCost = result.reducedCost;
+                    nc.iteration = pricingIterCounter;
+                    if ((int)colList.size() < kMaxCachedCols) {
+                        colList.push_back(std::move(nc));
+                    } else {
+                        // 淘汰 iteration 最小（最旧）的列
+                        int oldestPos = 0;
+                        for (int c = 1; c < (int)colList.size(); c++) {
+                            if (colList[c].iteration < colList[oldestPos].iteration) {
+                                oldestPos = c;
+                            }
+                        }
+                        colList[oldestPos] = std::move(nc);
+                    }
+                }
             }
         }
 
@@ -172,6 +274,72 @@ public:
         pricingTime += std::chrono::duration<double>(end - start).count();
 
         return result;
+    }
+
+    /**
+     * 求解DC j的定价子问题，返回多个正检验数列（multi-column pricing）。
+     *
+     * 先调用 solve() 得到当前对偶下的最优列（与单列行为完全一致，保证解质量不变），
+     * 再从该 DC 的缓存池中额外挑出其它正检验数列一起返回，一次性向 RMP 注入更多列，
+     * 从而压缩大规模列生成的迭代轮数。返回的所有列都是当前对偶下 RC > rc_eps 的合法列。
+     *
+     * @param j DC索引
+     * @param dual 对偶变量数组
+     * @param maxCols 最多返回的列数（含最优列），<=1 时退化为单列
+     * @param branch 分支约束
+     * @return 按 RC 降序排列的多个正检验数列，首列为最优列。若无正列则返回空。
+     */
+    std::vector<PricingResult> solveMulti(int j, const std::vector<double>& dual,
+                                          int maxCols,
+                                          const BranchState* branch = nullptr) {
+        std::vector<PricingResult> out;
+        PricingResult best = solve(j, dual, branch);
+        if (best.reducedCost <= rc_eps) {
+            return out;  // 无正检验数列，直接返回空
+        }
+        out.push_back(best);
+        if (maxCols <= 1 || j >= (int)cachedBestCols.size()) {
+            return out;  // 单列模式或无缓存池，退化为单列
+        }
+
+        // 从缓存池中额外挑出当前对偶下的其它正 RC 列（排除已返回的最优列）。
+        ObjectiveFormula objFormula;
+        std::vector<PricingResult> extras;
+        for (const auto& cached : cachedBestCols[j]) {
+            // 跳过与最优列相同的列（相同 S 且相同 p_j）
+      if (cached.p_j == best.optimal_pj && cached.S == best.optimal_S) {
+                continue;
+            }
+            if (branch != nullptr && !branch->isColumnFeasible(j, cached.S)) {
+                continue;  // 分支约束下不可行
+            }
+            // 用当前对偶重新计算该缓存列的真实检验数
+            double profit = objFormula.columnProfit(*inst, j, cached.S, cached.p_j,
+                (j < (int)inst->w.size()) ? inst->w[j] : 0.0);
+            double rc = profit;
+            for (int i = 0; i < inst->numRetailer; i++) {
+                if (cached.S[i] == 1) rc -= dual[i];
+            }
+            rc -= dual[inst->numRetailer + j];
+            if (rc > rc_eps) {
+                PricingResult pr(inst->numRetailer);
+                pr.dcIndex = j;
+                pr.reducedCost = rc;
+                pr.optimal_pj = cached.p_j;
+                pr.optimal_S = cached.S;
+              extras.push_back(std::move(pr));
+            }
+        }
+        // 按 RC 降序取前 (maxCols-1) 个附赠列
+        std::sort(extras.begin(), extras.end(),
+                  [](const PricingResult& a, const PricingResult& b) {
+                      return a.reducedCost > b.reducedCost;
+                  });
+        int room = maxCols - 1;
+        for (int c = 0; c < (int)extras.size() && c < room; c++) {
+            out.push_back(std::move(extras[c]));
+        }
+        return out;
     }
 
     /**
@@ -202,35 +370,57 @@ private:
      * 优化：trans_cost_sup_dc 不依赖 i，提到循环外面计算；
      *       每对 (i,j) 的 c(d_ij) 和 b̂_ij 是固定的，可提前缓存。
      */
-    std::vector<RetailerFeature> computeFeatures(int j, double p_j,
-                                                   const std::vector<double>& dual) const {
+    // 【优化5：价格无关基底缓存】
+    // Ai(p_j) = (trans_dc_ret + trans_sup_dc − new_revenue(p_j)) · μ_i + dual[i]
+    // 其中只有 new_revenue = (p_j>reserve_i)?0:p_j 依赖候选价格，其余全为
+    // 价格无关基底。一次 solve(j,dual) 调用内 j/dual 固定、仅 p_j 在变，
+    // 故把基底 baseAi_i = (trans_dc_ret + trans_sup_dc)·μ_i + dual[i] 预算一次，
+    // 各候选价格只需 O(1) 减去 new_revenue·μ_i，省掉重复的分段运输公式调用。
+    // 纯局部结构（栈上、随 solve 返回释放），不跨调用、不跨线程 → 零并发风险。
+    struct FeatureBase {
+        std::vector<double> baseAi;   // 价格无关部分 (trans+trans)·μ_i + dual[i]
+    };
+
+    FeatureBase computeFeatureBase(int j, const std::vector<double>& dual) const {
         double w_j = (j < (int)inst->w.size()) ? inst->w[j] : 0.0;
-        std::vector<RetailerFeature> features;
-        features.reserve(inst->numRetailer);
+        FeatureBase base;
+        base.baseAi.reserve(inst->numRetailer);
 
         // trans_cost_sup_dc 不依赖 i，提到循环外
         double trans_cost_sup_dc = TransportCostFormula::costSupplierToDC(inst->a_dist[j])
             + inst->p * (1.0 - w_j) * inst->b[j];
 
         for (int i = 0; i < inst->numRetailer; i++) {
-            double new_revenue = (p_j > inst->reservePrice[i]) ? 0.0 : p_j;
-
-            // c(d_ij) + p̂·b̂_ij·(1-w_j) 也可以提，但b̂_ij = k*d_ij 不是固定的
-            // 这里直接用数值计算，缓存留到更高级别
             double trans_cost_dc_retail = TransportCostFormula::costDCToRetailer(inst->dist[i][j])
                 + inst->p * (1.0 - w_j) * inst->bb[i][j];
+            base.baseAi.push_back(
+                (trans_cost_dc_retail + trans_cost_sup_dc) * inst->mu[i] + dual[i]);
+        }
+        return base;
+    }
 
-            double Ai = (trans_cost_dc_retail + trans_cost_sup_dc - new_revenue)
-                        * inst->mu[i] + dual[i];
-
+    // 快路径重载：复用价格无关基底，仅叠加价格相关项 −new_revenue·μ_i。
+    std::vector<RetailerFeature> computeFeatures(int j, double p_j,
+                                                 const std::vector<double>& dual,
+                                                 const FeatureBase& base) const {
+        std::vector<RetailerFeature> features;
+        features.reserve(inst->numRetailer);
+        for (int i = 0; i < inst->numRetailer; i++) {
+            double new_revenue = (p_j > inst->reservePrice[i]) ? 0.0 : p_j;
             RetailerFeature f;
             f.idx = i;
-            f.Ai = Ai;
+            f.Ai = base.baseAi[i] - new_revenue * inst->mu[i];
             f.mu = inst->mu[i];
             f.variance = inst->variance[i];
             features.push_back(f);
         }
         return features;
+    }
+
+    std::vector<RetailerFeature> computeFeatures(int j, double p_j,
+                                                   const std::vector<double>& dual) const {
+        // 兼容旧调用点：内部先算基底再走快路径（单次调用无额外重复）。
+        return computeFeatures(j, p_j, dual, computeFeatureBase(j, dual));
     }
 
     /**
@@ -278,6 +468,46 @@ private:
     }
 
     /**
+     * 【优化3】计算候选价 p_j 的 RC 上界（严格无损剪枝用）
+     *
+     * 任意服务集合 S 的检验数：
+     *   RC(S) = columnProfit(S, p_j) - Σ_{i∈S} λ_i - λ_DC
+     * 在 computeFeatures 中，选中零售商 i 对 RC 的边际贡献恰为 -Ai，
+     * 与 S 无关的固定项为 -facilityCost - λ_DC（空集时的 RC）。
+     *
+     * 因此该价可达到的 RC 上界 =
+     *   空集RC + Σ_{i: Ai<0} (-Ai)
+     * 这是紧上界：加入任何 Ai≥0 的零售商只会降低 RC。
+     *
+     * 上界 ≥ 该价下所有集合的真实 RC，故据此剪枝严格无损。
+     * 代价仅 O(n)（一次 computeFeatures），远低于 O(n³) 的凸包枚举。
+     *
+     * @return 该候选价可能达到的最大检验数上界
+     */
+    double computePriceUpperBound(int j, double p_j,
+                                  const std::vector<double>&dual,
+                                  const FeatureBase* base = nullptr) const {
+        double w_j = (j < (int)inst->w.size()) ? inst->w[j] : 0.0;
+        auto features = base ? computeFeatures(j, p_j, dual, *base)
+                             : computeFeatures(j, p_j, dual);
+
+        // 空集列利润（S 全 0）：收入=0，仅含固定成本与运输/库存的常数部分。
+        // columnProfit 对空集返回 -facilityCost（运输/库存对空集为 0）。
+        std::vector<int> emptyS(inst->numRetailer, 0);
+        ObjectiveFormula objFormula;
+        double emptyProfit = objFormula.columnProfit(*inst, j, emptyS, p_j, w_j);
+        double upper = emptyProfit - dual[inst->numRetailer + j];
+
+        // 累加所有正贡献零售商的边际贡献 -Ai（Ai<0 时为正）
+        for (int i = 0; i < inst->numRetailer; i++) {
+            if (features[i].Ai < 0) {
+                upper += -features[i].Ai;
+            }
+        }
+        return upper;
+    }
+
+    /**
      * 从 negative_idx 重建 S 向量
      */
     static std::vector<int> buildS(int numRetailer,
@@ -304,12 +534,210 @@ private:
      * 使用预计算的边际贡献快速计算检验数
      */
     PricingResult solveForPrice_Simplified(int j, double p_j,
-                                            const std::vector<double>& dual) {
+                                            const std::vector<double>& dual,
+                                            const BranchState* branch = nullptr,
+                                            const FeatureBase* base = nullptr) {
         PricingResult result(inst->numRetailer);
         result.dcIndex = j;
         result.optimal_pj = p_j;
 
         double w_j = (j < (int)inst->w.size()) ? inst->w[j] : 0.0;
+
+        auto features = base ? computeFeatures(j, p_j, dual, *base)
+                             : computeFeatures(j, p_j, dual);
+
+        // 收集 Ai < 0 的零售商，同时预计算每个候选零售商对列利润的
+        // 【线性单位贡献】，供后续增量式检验数计算复用（优化 D）。
+        //   locRevenue_t = r_i(p_j)·μ_i                       —— 收入线性项
+        //   locTransport_t = (c_sup_dc + c_dc_ret)·μ_i
+        //                    + p̂(1-w_j)(b̂_j + b̂_ij)·μ_i       —— 运输(含碳)线性项
+        //   locMu_t / locVar_t 用于库存 EOQ/安全库存的非线性 √ 项
+        //   locDual_t = dual[i]                               —— RMP 对偶线性项
+        // 这些量与 columnProfit 各子公式逐项等价，故据此聚合严格无损。
+        std::vector<int> negative_idx;
+        std::vector<double> xi(inst->numRetailer);
+        std::vector<double> yi(inst->numRetailer);
+
+        // negative 局部单位量（下标与 negative_idx 对齐，长度 n_neg）
+        std::vector<double> locRevenue, locTransport, locMu, locVar, locDual;
+        negative_idx.reserve(inst->numRetailer);
+        locRevenue.reserve(inst->numRetailer);
+        locTransport.reserve(inst->numRetailer);
+        locMu.reserve(inst->numRetailer);
+        locVar.reserve(inst->numRetailer);
+        locDual.reserve(inst->numRetailer);
+
+        double trans_cost_sup_dc = TransportCostFormula::costSupplierToDC(inst->a_dist[j]);
+        double carbon_factor = inst->p * (1.0 - w_j);
+        double carbon_sup_dc = inst->b[j];  // b̂_j
+
+        for (int i = 0; i < inst->numRetailer; i++) {
+            if (features[i].Ai < 0) {
+                negative_idx.push_back(i);
+                xi[i] = -static_cast<double>(features[i].mu) / features[i].Ai;
+                yi[i] = -features[i].variance / features[i].Ai;
+
+                double mu_i = inst->mu[i];
+                double rev = ((p_j <= inst->reservePrice[i]) ? p_j : 0.0) * mu_i;
+                double trans_lin = (trans_cost_sup_dc
+                                    + TransportCostFormula::costDCToRetailer(inst->dist[i][j]))
+                                   * mu_i;
+                double trans_carbon = carbon_factor * (carbon_sup_dc + inst->bb[i][j]) * mu_i;
+
+                locRevenue.push_back(rev);
+                locTransport.push_back(trans_lin + trans_carbon);
+                locMu.push_back(mu_i);
+                locVar.push_back(inst->variance[i]);
+                locDual.push_back(dual[i]);
+            }
+        }
+
+        int n_neg = negative_idx.size();
+
+        // 与 S 无关的常数项（提到候选循环外）：
+        //   facilityCost = f_j + p̂·f̂_j·(1-w_j)
+        //   inv_factor 库存成本因子，用于 EOQ/安全库存
+        double facilityCost = FacilityCostFormula::totalFixedCost(*inst, j, w_j);
+        double inv_factor = InventoryCostFormula::inventoryCostFactor(
+            inst->h, inst->p, inst->hat_h, w_j);
+        double dualDC = dual[inst->numRetailer + j];
+        double constRC = -facilityCost - dualDC;  // 空集(D=0,库存=0) 的 RC
+
+        // 【优化 A+B】候选服务集合只在 negative_idx 的局部下标(0..n_neg-1)上枚举：
+        // Ai >= 0 的零售商选入只会降低检验数，绝不可能出现在最优 S 中，
+        // 故无需为其分配全 R 维向量、无需参与去重。这样把原先 O(R) 的
+        // 向量构造/遍历/去重全部降到 O(n_neg)，且用 bitmask(vector<uint64_t>)
+        // 替代 R 长 std::string 作去重 key，消除大量堆分配。
+        // 本优化严格无损：候选集合与原实现完全一致，只是表示方式更紧凑。
+        constexpr int kBits = 64;
+        int nWords = (n_neg + kBits - 1) / kBits;
+        if (nWords < 1) nWords = 1;
+        std::vector<std::vector<uint64_t>> localCandidates;  // 每个候选：局部下标的 bitmask
+
+        auto emptyMask = [&]() { return std::vector<uint64_t>(nWords, 0ULL); };
+        auto setBit = [&](std::vector<uint64_t>& mask, int localIdx) {
+            mask[localIdx / kBits] |= (1ULL << (localIdx % kBits));
+        };
+
+        // 空集候选
+        localCandidates.push_back(emptyMask());
+
+        if (n_neg == 1) {
+            auto one = emptyMask();
+            setBit(one, 0);
+            localCandidates.push_back(one);
+        } else if (n_neg >= 2) {
+            // 单元素集
+            for (int t = 0; t < n_neg; t++) {
+                auto single = emptyMask();
+                setBit(single, t);
+                localCandidates.push_back(single);
+            }
+
+            // 枚举所有两点组合（在局部下标上操作）
+            for (int m = 0; m < n_neg - 1; m++) {
+                for (int n = m + 1; n < n_neg; n++) {
+                    int idx_m = negative_idx[m];
+                    int idx_n = negative_idx[n];
+
+                    double dx = xi[idx_n] - xi[idx_m];
+                    if (std::abs(dx) < 1e-15) continue;
+                    double k = (yi[idx_n] - yi[idx_m]) / dx;
+                    double b = yi[idx_n] - k * xi[idx_n];
+
+                    auto below = emptyMask();
+                    auto above = emptyMask();
+
+                    for (int t = 0; t < n_neg; t++) {
+                        int idx_t = negative_idx[t];
+                        double val = k * xi[idx_t] + b;
+                        if (yi[idx_t] <= val + 1e-12) setBit(below, t);
+                        if (yi[idx_t] >= val - 1e-12) setBit(above, t);
+                    }
+
+                    localCandidates.push_back(std::move(below));
+                    localCandidates.push_back(std::move(above));
+                }
+            }
+        }
+
+        // 去重（bitmask 作 key）并计算检验数（优化 D：增量式聚合）。
+        // 每个候选只遍历其【选中的 negative 位】累加 5 个标量，
+        // 再按 columnProfit 的等价公式组合，避免展开全 R 维 + 6 次 O(R) 遍历。
+        // 分支可行性与 optimal_S 输出仍需全 R 维，故仅在候选可能刷新最优、
+        // 或需分支过滤时才按需展开一次，热路径开销降为 O(popcount)。
+        std::vector<int> Sfull(inst->numRetailer, 0);
+        std::unordered_set<std::vector<uint64_t>, MaskHash> seen;
+        seen.reserve(localCandidates.size() * 2);  // 预留桶，减少 rehash
+        for (const auto& mask : localCandidates) {
+            if (!seen.insert(mask).second) continue;
+
+            // 增量聚合选中位的线性量与需求/方差
+            double sumRev = 0.0, sumTrans = 0.0, sumMu = 0.0, sumVar = 0.0, sumDual = 0.0;
+            for (int t = 0; t < n_neg; t++) {
+                if (mask[t / kBits] & (1ULL << (t % kBits))) {
+                    sumRev += locRevenue[t];
+                    sumTrans += locTransport[t];
+                    sumMu += locMu[t];
+                    sumVar += locVar[t];
+                    sumDual += locDual[t];
+                }
+            }
+
+            // 库存 EOQ + 安全库存（非线性 √ 项）；空集(D=0)时为 0
+            double inventoryCost = 0.0;
+            if (sumMu > 0.0) {
+                inventoryCost = InventoryCostFormula::eoqCost(
+                                    inst->F[j], inst->g[j], inv_factor, sumMu)
+                              + InventoryCostFormula::safetyStockCost(
+                                    inv_factor, inst->z_alpha, inst->L[j], sumVar);
+            }
+
+            // RC = columnProfit - Σλ_i - λ_DC
+            //    = (sumRev - facilityCost - sumTrans - inventoryCost) - sumDual - dualDC
+            double rc = constRC + sumRev - sumTrans - inventoryCost - sumDual;
+
+            if (rc <= result.reducedCost) continue;  // 不优则无需展开/过滤
+
+            // 展开为全 R 维（供分支约束与结果输出）
+            std::fill(Sfull.begin(), Sfull.end(), 0);
+            for (int t = 0; t < n_neg; t++) {
+                if (mask[t / kBits] & (1ULL << (t % kBits))) {
+                    Sfull[negative_idx[t]] = 1;
+                }
+            }
+            // 分支约束过滤：违反 (j,i,value) 约束则跳过
+            if (branch && !branch->isColumnFeasible(j, Sfull)) continue;
+
+            result.reducedCost = rc;
+            result.optimal_S = Sfull;
+        }
+
+        return result;
+    }
+
+    // ============================================================
+    // 算法3(优化4)：凸包剪枝 — Andrew 单调链
+    // ============================================================
+
+    /**
+     * 凸包剪枝版定价求解
+     *
+     * 与 Simplified 唯一区别：用 (xi, yi) 点集的凸包边界相邻点对
+     * 生成半平面切割，而非 n^2 全点对。凸包边 O(n) 条，
+     * 复杂度由 O(n^2) 点对降至 O(n) 点对。
+     *
+     * 注意：此为路径扰动启发式，相对全点对会丢内部点对连线的候选，
+     * 不保证与 Simplified 结果一致，仅用于三方案对比实验。
+     */
+    PricingResult solveForPrice_ConvexHull(int j, double p_j,
+                                           const std::vector<double>& dual,
+                                           const BranchState* branch = nullptr) {
+        PricingResult result(inst->numRetailer);
+        result.dcIndex = j;
+        result.optimal_pj = p_j;
+
+        double w_j = (j < static_cast<int>(inst->w.size())) ? inst->w[j] : 0.0;
 
         auto features = computeFeatures(j, p_j, dual);
 
@@ -326,52 +754,90 @@ private:
             }
         }
 
-        int n_neg = negative_idx.size();
+        int n_neg = static_cast<int>(negative_idx.size());
         std::vector<std::vector<int>> candidates;
 
         // 空集候选
         candidates.push_back(std::vector<int>(inst->numRetailer, 0));
 
-        if (n_neg == 1) {
-            std::vector<int> one(inst->numRetailer, 0);
-            one[negative_idx[0]] = 1;
-            candidates.push_back(one);
-        } else if (n_neg >= 2) {
-            // 单元素集
+        // 单元素集
+        for (int t = 0; t < n_neg; t++) {
+            std::vector<int> single(inst->numRetailer, 0);
+            single[negative_idx[t]] = 1;
+            candidates.push_back(single);
+        }
+
+        if (n_neg >= 2) {
+            // ===== Andrew 单调链求凸包 =====
+            // 每个点存 (x, y, 原始零售商下标)
+            std::vector<std::array<double, 3>> pts;
+            pts.reserve(n_neg);
             for (int t = 0; t < n_neg; t++) {
-                std::vector<int> single(inst->numRetailer, 0);
-                single[negative_idx[t]] = 1;
-                candidates.push_back(single);
+                int idx = negative_idx[t];
+                pts.push_back({xi[idx], yi[idx], static_cast<double>(idx)});
             }
+            std::sort(pts.begin(), pts.end(),
+                      [](const std::array<double, 3>& a,
+                         const std::array<double, 3>& b) {
+                          if (std::abs(a[0] - b[0]) > 1e-15) return a[0] < b[0];
+                          return a[1] < b[1];
+                      });
 
-            // 枚举所有两点组合
-            for (int m = 0; m < n_neg - 1; m++) {
-                for (int n = m + 1; n < n_neg; n++) {
-                    int idx_m = negative_idx[m];
-                    int idx_n = negative_idx[n];
+            auto cross = [](const std::array<double, 3>& o,
+                            const std::array<double, 3>& a,
+                            const std::array<double, 3>& b) -> double {
+                return (a[0] - o[0]) * (b[1] - o[1]) -
+                       (a[1] - o[1]) * (b[0] - o[0]);
+            };
 
-                    double dx = xi[idx_n] - xi[idx_m];
-                    if (std::abs(dx) < 1e-15) continue;
-                    double k = (yi[idx_n] - yi[idx_m]) / dx;
-                    double b = yi[idx_n] - k * xi[idx_n];
-
-                    std::vector<int> below(inst->numRetailer, 0);
-                    std::vector<int> above(inst->numRetailer, 0);
-
-                    for (int t = 0; t < n_neg; t++) {
-                        int idx_t = negative_idx[t];
-                        double val = k * xi[idx_t] + b;
-                        if (yi[idx_t] <= val + 1e-12) below[idx_t] = 1;
-                        if (yi[idx_t] >= val - 1e-12) above[idx_t] = 1;
-                    }
-
-                    candidates.push_back(below);
-                    candidates.push_back(above);
+            int m = static_cast<int>(pts.size());
+            std::vector<std::array<double, 3>> hull(2 * m);
+            int k = 0;
+            // 下凸包
+            for (int t = 0; t < m; t++) {
+                while (k >= 2 && cross(hull[k - 2], hull[k - 1], pts[t]) <= 0) {
+                    k--;
                 }
+                hull[k++] = pts[t];
+            }
+            // 上凸包
+            for (int t = m - 2, lower = k + 1; t >= 0; t--) {
+                while (k >= lower &&
+                       cross(hull[k - 2], hull[k - 1], pts[t]) <= 0) {
+                    k--;
+                }
+                hull[k++] = pts[t];
+            }
+            hull.resize(k > 0 ? k - 1 : 0);  // 去掉重复的起点
+
+            // ===== 只枚举凸包边界相邻点对做半平面切割 =====
+            int h = static_cast<int>(hull.size());
+            for (int a = 0; a < h; a++) {
+                int b = (a + 1) % h;
+                int idx_m = static_cast<int>(hull[a][2]);
+                int idx_n = static_cast<int>(hull[b][2]);
+
+                double dx = xi[idx_n] - xi[idx_m];
+                if (std::abs(dx) < 1e-15) continue;
+                double slope = (yi[idx_n] - yi[idx_m]) / dx;
+                double intercept = yi[idx_n] - slope * xi[idx_n];
+
+                std::vector<int> below(inst->numRetailer, 0);
+                std::vector<int> above(inst->numRetailer, 0);
+
+                for (int t = 0; t < n_neg; t++) {
+                    int idx_t = negative_idx[t];
+                    double val = slope * xi[idx_t] + intercept;
+                    if (yi[idx_t] <= val + 1e-12) below[idx_t] = 1;
+                    if (yi[idx_t] >= val - 1e-12) above[idx_t] = 1;
+                }
+
+                candidates.push_back(below);
+                candidates.push_back(above);
             }
         }
 
-        // 去重并计算检验数（使用快速版本）
+        // 去重并计算检验数（复用 Simplified 逻辑）
         auto vectorToKey = [](const std::vector<int>& v) -> std::string {
             std::string key;
             for (int x : v) key += (x ? '1' : '0');
@@ -381,6 +847,7 @@ private:
         for (const auto& S : candidates) {
             std::string key = vectorToKey(S);
             if (!seen.insert(key).second) continue;
+            if (branch && !branch->isColumnFeasible(j, S)) continue;
             double rc = computeReducedCost(S, j, p_j, w_j, dual);
             if (rc > result.reducedCost) {
                 result.reducedCost = rc;
@@ -410,7 +877,8 @@ private:
      *   Step 4: 生成 12 个候选集，计算完整检验数，取最优
      */
     PricingResult solveForPrice_Algorithm3(int j, double p_j,
-                                            const std::vector<double>& dual) {
+                                            const std::vector<double>& dual,
+                                            const BranchState* branch = nullptr) {
         PricingResult result(inst->numRetailer);
         result.dcIndex = j;
         result.optimal_pj = p_j;
@@ -635,6 +1103,8 @@ private:
             for (int ptIdx : selIndices) {
                 S[points[ptIdx].origIdx] = 1;
             }
+            // 分支约束过滤：跳过违反 (j,i,value) 约束的服务集合
+            if (branch && !branch->isColumnFeasible(j, S)) continue;
             double rc = computeReducedCost(S, j, p_j, w_j, dual);
             if (rc > bestRC) {
                 bestRC = rc;

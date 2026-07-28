@@ -17,6 +17,7 @@
 #include "../9_postprocessor/01_PostProcessor.h"
 #include <string>
 #include <iostream>
+#include <sstream>
 #include <memory>
 #include <chrono>
 
@@ -33,15 +34,30 @@ public:
     Orchestrator() = default;
     ~Orchestrator() = default;
 
-    /** 初始化 */
-    void initialize(const std::string& configPath) {
+    /**
+     * 初始化
+     *
+     * @param configPath 配置文件路径
+     * @param externalOutputDir 外部指定的输出目录（批量实验用）。
+     *        非空时直接使用该目录，不再创建 single 目录；
+     *        为空时按单次运行创建 results/single/ 目录。
+     */
+    void initialize(const std::string& configPath,
+                    const std::string& externalOutputDir = "") {
         // 读配置
         config_.loadFromFile(configPath);
 
-        // 创建输出目录
-        std::string configName = configPath.substr(configPath.find_last_of("/") + 1);
-        configName = configName.substr(0, configName.find_last_of("."));
-        outputDir_ = OutputManager::createSingleRunDir(configName);
+        // 确定输出目录：批量实验传入 entryDir（落到 results/experiment/），
+        // 单次运行则创建 results/single/ 目录，二者互不干扰。
+        if (!externalOutputDir.empty()) {
+            outputDir_ = externalOutputDir;
+            if (outputDir_.back() != '/') outputDir_ += '/';
+        } else {
+            std::string configName =
+                configPath.substr(configPath.find_last_of("/") + 1);
+            configName = configName.substr(0, configName.find_last_of("."));
+            outputDir_ = OutputManager::createSingleRunDir(configName);
+        }
         config_.output_dir = outputDir_;
         config_.log_file = outputDir_ + "run.log";
 
@@ -126,6 +142,12 @@ private:
 
         // 输出结果
         outputResults(sol, config_.fixed_w, profit, emission, solveTime, 0);
+
+        // 后处理明细（逐 DC 的 w/p/D/Q* + 碳交易 e±）打到终端
+        postProc.print();
+
+        // 打印时间分布报告（终端 + run.log 同步）
+        emitTimingAndSummary();
     }
 
     /** 标准 GA+BP 模式 */
@@ -171,9 +193,42 @@ private:
         // 输出结果
         outputResults(bestSolution, bestW, profit, emission, gaTime, 0);
 
-        // 打印时间分布报告
-        monitor_.printTimingReport();
-        monitor_.printSummary();
+        // 后处理明细（逐 DC 的 w/p/D/Q* + 碳交易 e±）打到终端
+        postProc.print();
+
+        // 打印时间分布报告（终端 + run.log 同步）
+        emitTimingAndSummary();
+    }
+
+    /**
+     * 输出时间分布报告和统计摘要。
+     *
+     * 终端与 run.log 同步：时间分布树既打印到控制台，也写入日志文件，
+     * 保证工作台输出（run.log）与终端内容一致。
+     */
+    void emitTimingAndSummary() {
+        const std::string timing = monitor_.formatTimingReport();
+        const std::string summary = monitor_.formatSummary();
+
+        // 终端输出
+        std::cout << timing << std::endl;
+        std::cout << summary << std::endl;
+
+        // 写入 run.log（临时关闭终端模式，避免重复打印）
+        logMultilineToFile(timing);
+        logMultilineToFile(summary);
+    }
+
+    /** 将多行文本逐行写入 run.log（仅文件，不重复输出终端） */
+    void logMultilineToFile(const std::string& text) {
+        const bool prevConsole = logger_.getConsoleMode();
+        logger_.setConsoleMode(false);
+        std::istringstream iss(text);
+        std::string line;
+        while (std::getline(iss, line)) {
+            logger_.raw(line);
+        }
+        logger_.setConsoleMode(prevConsole);
     }
 
     /** 统一输出结果 */
@@ -203,12 +258,12 @@ private:
         int gaGens = static_cast<int>(monitor_.convergenceHistory().size());
         resultWriter_.collectFrom(monitor_, w, profit, emission, solveTime,
                                    dcOpen, rtServed, monitor_.totalBranchNodes(),
-                                   gaGens);
+                                   gaGens, instance_->C);
         resultWriter_.setSolution(sol.dcSolutions);
 
         // 保存报告
         std::string reportFile = outputDir_ + "report.txt";
-        resultWriter_.saveReport(reportFile, *instance_, w, baseProfit);
+        resultWriter_.saveReport(reportFile, *instance_, w, baseProfit, config_);
         std::cout << "报告已保存至: " << reportFile << std::endl;
 
         // 保存收敛曲线
@@ -223,6 +278,14 @@ private:
         std::cout << "求解时间(秒): " << solveTime << std::endl;
         std::cout << "#DCs Open: " << dcOpen << std::endl;
         std::cout << "#Rts Served: " << rtServed << std::endl;
+
+        // 碳交易量（e+ 需购买 / e- 可出售），直观反映减排效果
+        double cCap = instance_->C;
+        double ePlus = std::max(0.0, emission - cCap);
+        double eMinus = std::max(0.0, cCap - emission);
+        std::cout << "碳配额 C: " << cCap
+                  << " | e+ 购买: " << ePlus
+                 << " | e- 出售: " << eMinus << std::endl;
     }
 
     static std::string wToString(const std::vector<double>& w) {

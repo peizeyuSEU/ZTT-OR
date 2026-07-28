@@ -22,11 +22,14 @@
 #include <unordered_map>
 #include <functional>
 #include <iomanip>
+#include <sstream>
 #include <future>
+#include <array>
 #include <mutex>
 // fork 并行评估所需头文件
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <cstring>
 #include <sstream>
 
@@ -76,6 +79,45 @@ private:
     double accumulatedDecodeTime_ = 0.0;
     double accumulatedEvalTime_ = 0.0;
 
+    // 并行适应度评估累计统计（由子进程回传后在父进程聚合）
+    double parallelBpTime_ = 0.0;
+    double parallelCgTime_ = 0.0;
+    double parallelPsTime_ = 0.0;
+    double parallelBbTime_ = 0.0;
+    double parallelCplexBuildTime_ = 0.0;
+    double parallelCplexSolveTime_ = 0.0;
+    int parallelCgIterations_ = 0;
+    int parallelCgColumns_ = 0;
+    int parallelTotalNodes_ = 0;
+    int parallelPrunedNodes_ = 0;
+
+    // 串行适应度评估累计统计：与并行 fork 完全对称——逐个体取「本次求解增量」累加，
+    // 缓存命中不计入。这样串行/并行上报给 monitor 的 CG 迭代口径完全一致，
+    // 都表示「所有真实求解的 CG 迭代总和」，可直接横向对比。
+    int serialCgIterations_ = 0;
+    int serialCgColumns_ = 0;
+    int serialTotalNodes_ = 0;
+    int serialPrunedNodes_ = 0;
+
+    // 并行管理开销累计（父进程侧墙钟计时，用于诊断 fork 并行是否划算）
+    double parallelForkTime_ = 0.0;    // fork() + pipe() 创建子进程的墙钟耗时
+    double parallelWaitTime_ = 0.0;    // waitpid 等待子进程结束的墙钟耗时
+    double parallelMergeTime_ = 0.0;   // readChild 读管道 + 聚合结果的墙钟耗时
+    double parallelWallTime_ = 0.0;    // 每代 fork 段整体墙钟（含调度），跨代累加
+    double serialEquivBpTime_ = 0.0;   // 各子进程 BP 耗时之和（= 串行等效计算时间）
+    int parallelGenerations_ = 0;      // 实际走并行的代数
+
+    // 「最近一代」并行流水快照（供 run() 每代打印，非累计）
+    double lastGenWall_ = 0.0;
+    double lastGenSerialEquiv_ = 0.0;
+    double lastGenForkTime_ = 0.0;
+    double lastGenWaitTime_ = 0.0;
+    double lastGenMergeTime_ = 0.0;
+    int lastGenCgIterations_ = 0;
+    int lastGenCgColumns_ = 0;
+    int lastGenTotalNodes_ = 0;
+    bool lastGenParallel_ = false;
+
 public:
     GeneticAlgorithm(const Config& cfg, Instance& instance)
         : config(&cfg), inst(&instance), rng(cfg.random_seed), logger(nullptr),
@@ -122,9 +164,19 @@ public:
         // ===== 1. 初始化种群 =====
         population = initializePopulation(popSize, geneLength);
 
-        std::cout << "[GA] 遗传算法开始，种群大小=" << popSize
-                  << "，最大代数=" << maxGen
-                  << "，编码位数=" << chromLen << std::endl;
+        // ===== 环节配置横幅：GA 层（第4层，外层元启发式） =====
+        std::cout << "\n========== [环节1/5] 遗传算法 GA（外层：对减排率 w_j 编码搜索） ==========" << std::endl;
+        std::cout << "  设计: 二进制编码 w_j → 轮盘赌选择 → 两点交叉 → 按位变异 → 精英保留" << std::endl;
+        std::cout << "  配置: 种群=" << popSize << " | 最大代数=" << maxGen
+                  << " | 编码位数=" << chromLen << "/DC | 基因总长=" << geneLength << std::endl;
+        std::cout << "        交叉率=" << config->crossover_rate
+                  << " | 变异率=" << config->mutation_rate
+                  << " | 精英保留=" << (config->elitism ? "是" : "否")
+                  << " | w范围=[" << config->min_w << "," << config->max_w << "]" << std::endl;
+        std::cout << "        提前停止=" << (config->early_stop ? "是" : "否")
+                  << " | 连续未提升阈值=" << config->convergence_generations << "代"
+                  << " | 提升容差=" << config->convergence_tolerance << std::endl;
+        std::cout << "  优化: 二进制解码查表(替代 std::pow) | 每 w 命中 BP 层 fitnessCache 直接返回" << std::endl;
 
         // ===== 2. 主迭代 =====
         int noImproveCount = 0;
@@ -134,7 +186,7 @@ public:
             auto genStart = std::chrono::steady_clock::now();
 
             // 2a. 计算适应度
-            std::vector<double> fitness = calculateFitness(population);
+            std::vector<double> fitness = calculateFitness(population, gen);
 
             // 2b. 统计
             double genBest = fitness[0];
@@ -185,19 +237,63 @@ public:
             auto genEnd = std::chrono::steady_clock::now();
             double genTime = std::chrono::duration<double>(genEnd - genStart).count();
 
-            std::cout << "代数 " << gen << ": Best=" << std::fixed << std::setprecision(2)
-                      << bestFitness << ", Avg=" << genAvg
-                      << ", Worst=" << genWorst
-                      << ", 耗时=" << genTime << "s";
+            std::ostringstream summary;
+            summary << std::fixed << std::setprecision(2)
+                    << "代数 " << gen << ": Best=" << bestFitness
+                    << ", Avg=" << genAvg
+                    << ", Worst=" << genWorst
+                    << ", 耗时=" << genTime << "s";
 
             if (config->early_stop && noImproveCount > 0) {
-                std::cout << " (连续" << noImproveCount << "代未提升";
+                summary << " (连续" << noImproveCount << "代未提升";
                 if (noImproveCount >= config->convergence_generations) {
-                    std::cout << " → 提前停止";
+                    summary << " → 提前停止";
                 }
-                std::cout << ")";
+                summary << ")";
             }
-            std::cout << std::endl;
+            // progress: 既进 run.log 文件又输出终端，便于事后回看每代过程
+            if (logger) {
+                logger->progress(0, summary.str());
+            } else {
+                std::cout << summary.str() << std::endl;
+            }
+
+            // 2f-bis. 每代求解流水（展示求解思路 + 并行/串行实况）
+            {
+                std::ostringstream pipe;
+                pipe << std::fixed << std::setprecision(4);
+                if (lastGenParallel_) {
+                    double wall = lastGenWall_;
+                    double serialEquiv = lastGenSerialEquiv_;
+                    double mgmt = wall - serialEquiv;  // 并行净管理开销
+                    double speedup = wall > 1e-9 ? serialEquiv / wall : 0.0;
+                    pipe << "  ├─ 求解: " << (int)population.size()
+                         << " 个体 fork 并行 | CG迭代=" << lastGenCgIterations_
+                         << " 加列=" << lastGenCgColumns_
+                         << " BB节点=" << lastGenTotalNodes_ << "\n";
+           pipe << "  ├─ 并行墙钟=" << wall << "s | 串行等效(ΣBP)="
+                         << serialEquiv << "s | 加速比="
+                         << std::setprecision(2) << speedup << "x"
+                         << std::setprecision(4) << "\n";
+                    pipe << "  ├─ 管理开销=" << mgmt << "s (fork="
+                         << lastGenForkTime_ << " wait=" << lastGenWaitTime_
+                         << " merge=" << lastGenMergeTime_ << ")";
+                    if (speedup < 1.0) {
+                        pipe << "  [注意: 加速比<1，并行反而更慢，此规模建议串行]";
+                    }
+                    // 并行时每个个体的 CG 迭代明细写在各自独立日志文件里
+                    pipe << "\n  └─ CG明细: gen_logs/run_gen" << gen
+                         << "_ind{0.." << ((int)population.size() - 1) << "}.log";
+                } else {
+                    pipe << "  └─ 求解: 个体串行顺序评估"
+                         << " (fitnessCache 可命中，无 fork 开销)";
+                }
+                if (logger) {
+                    logger->raw(pipe.str());
+                } else {
+                    std::cout << pipe.str() << std::endl;
+                }
+            }
 
             // 提前停止
             if (config->early_stop && noImproveCount >= config->convergence_generations) {
@@ -252,9 +348,19 @@ public:
                                      accumulatedDecodeTime_,
                                      accumulatedEvalTime_);
             if (config->parallel_fitness && config->num_threads != 1) {
-                // 并行模式：BP 时间来自各线程，无法精确细分，用适应度评估总时间近似
+                // 并行模式下 BP 采用墙钟口径：与 GA 适应度评估耗时一致，避免累加各子进程耗时后超过总时间
                 monitor->reportBPTiming(accumulatedEvalTime_);
-                // CG/PS/BB 在并行模式下来自独立线程实例，不做细分统计
+                monitor->reportCGTiming(parallelCgTime_,
+                                         parallelCplexBuildTime_,
+                                         parallelCplexSolveTime_);
+                monitor->reportPricingTiming(parallelPsTime_);
+                monitor->reportBBTiming(parallelBbTime_);
+                monitor->reportBBNodes(parallelTotalNodes_, parallelPrunedNodes_);
+                monitor->reportCGIteration(parallelCgIterations_, parallelCgColumns_);
+                // 上报并行开销分项，使诊断树不再是全 0
+                // pipeIo 未单独计量（含在 fork 里），传 0
+                monitor->reportBPParallelOverhead(parallelForkTime_, 0.0,
+                                                  parallelWaitTime_, parallelMergeTime_);
             } else {
                 // 串行模式：所有 BP 调用都通过主 bp 对象，各时间累加正确
                 monitor->reportBPTiming(bp.getBPTime());
@@ -263,6 +369,48 @@ public:
                                          bp.getCplexSolveTime());
                 monitor->reportPricingTiming(bp.getPricingTime());
                 monitor->reportBBTiming(bp.getBBTime());
+                // 串行 CG 迭代/节点采用 serial* 累加器（逐个体增量、缓存命中不计），
+                // 与并行 reportBBNodes/reportCGIteration 口径完全对称
+                monitor->reportBBNodes(serialTotalNodes_, serialPrunedNodes_);
+                monitor->reportCGIteration(serialCgIterations_, serialCgColumns_);
+            }
+        }
+
+        // ===== 4b. 并行效率总报告（是否划算） =====
+        if (config->parallel_fitness && config->num_threads != 1
+            && parallelGenerations_ > 0) {
+            double wall = parallelWallTime_;
+            double serialEquiv = serialEquivBpTime_;
+            double speedup = wall > 1e-9 ? serialEquiv / wall : 0.0;
+            double mgmt = wall - serialEquiv;  // 净管理开销
+            double mgmtPct = wall > 1e-9 ? mgmt / wall * 100.0 : 0.0;
+
+            std::ostringstream rep;
+            rep << std::fixed << std::setprecision(4);
+            rep << "\n========== 并行效率总报告 ==========\n";
+            rep << "并行代数            : " << parallelGenerations_ << "\n";
+            rep << "并行墙钟(累计)      : " << wall << "s\n";
+            rep << "串行等效(ΣBP累计)   : " << serialEquiv << "s\n";
+            rep << "净管理开销          : " << mgmt << "s ("
+                << std::setprecision(1) << mgmtPct << "%)"
+                << std::setprecision(4) << "\n";
+            rep << "  ├─ fork  : " << parallelForkTime_ << "s\n";
+            rep << "  ├─ wait  : " << parallelWaitTime_ << "s\n";
+            rep << "  └─ merge : " << parallelMergeTime_ << "s\n";
+            rep << "加速比              : " << std::setprecision(2)
+                << speedup << "x" << std::setprecision(4) << "\n";
+            if (speedup < 1.0) {
+                rep << "结论: 加速比 < 1，并行反而更慢（负优化）。"
+                    << "单次 BP 求解太快，fork/进程管理开销占主导，"
+                    << "该规模建议设 parallel_fitness=false。\n";
+            } else {
+                rep << "结论: 加速比 > 1，并行有效收益。\n";
+            }
+            rep << "====================================";
+            if (logger) {
+                logger->raw(rep.str());
+            } else {
+                std::cout << rep.str() << std::endl;
             }
         }
 
@@ -331,7 +479,8 @@ private:
     /**
      * 计算种群适应度（支持并行）
      */
-    std::vector<double> calculateFitness(const std::vector<std::vector<double>>& pop) {
+    std::vector<double> calculateFitness(const std::vector<std::vector<double>>& pop,
+                                         int gen = -1) {
         int popSize = pop.size();
         std::vector<double> fitness(popSize, -DBL_MAX);
 
@@ -354,166 +503,238 @@ private:
         auto decodeEnd = std::chrono::steady_clock::now();
         accumulatedDecodeTime_ += std::chrono::duration<double>(decodeEnd - decodeStart).count();
 
+        // ===== 结构化并行诊断横幅（只打印一次） =====
+        // 目的：说清"哪一层并行 / 并发多少 / 共享还是深拷贝 / 下层求解器状态"，
+        //       并逐条打印并行三条件的实际取值，便于快速判断为何走并行或串行。
+        static bool evalBannerPrinted = false;
+        if (!evalBannerPrinted) {
+            bool condParallelFlag = parallel;
+            bool condPop = (popSize > 1);
+            bool condThreads = (numThreads > 1);
+            bool willParallel = (condParallelFlag && condPop && condThreads);
+            unsigned hwCores = std::thread::hardware_concurrency();
+
+            std::cout << "\n  +--------------- [并行诊断] 适应度评估层（GA 第4层外层） ---------------" << std::endl;
+            std::cout << "  | 评估任务: 每代对 " << popSize
+                      << " 个个体各调用一次分支定价 BP.solve(w)（含 CG->定价->BB）" << std::endl;
+            std::cout << "  | 并行三条件:" << std::endl;
+            std::cout << "  |   1) parallel_fitness = " << (condParallelFlag ? "true" : "false")
+                      << "   [" << (condParallelFlag ? "满足" : "不满足") << "]" << std::endl;
+            std::cout << "  |   2) population_size > 1 : " << popSize
+                      << "   [" << (condPop ? "满足" : "不满足") << "]" << std::endl;
+            std::cout << "  |   3) num_threads > 1 : 配置=" << config->num_threads
+                      << " -> 实际=" << numThreads
+                      << "（0 表示自动取 CPU 核数=" << hwCores << "）"
+                      << "   [" << (condThreads ? "满足" : "不满足") << "]" << std::endl;
+            std::cout << "  +---------------------------------------------------------------" << std::endl;
+
+            if (willParallel) {
+                std::cout << "  | >>> 当前模式: 【并行】GA 适应度评估层 fork 进程级并行" << std::endl;
+                std::cout << "  |     并发度: " << numThreads << " 个子进程同时运行"
+                          << "（个体总数 " << popSize << "，分批调度）" << std::endl;
+                std::cout << "  |     隔离方式: 每个体 fork() 独立子进程 + Instance.deepCopy() 深拷贝" << std::endl;
+                std::cout << "  |               （不共享求解器，各持独立 BranchAndPrice，无锁无竞争）" << std::endl;
+                std::cout << "  |     结果回传: 子进程算完经管道 pipe() 回传 fitness 及 BP/CG/PS 计时" << std::endl;
+                std::cout << "  |     下层状态: 每个子进程内部 BP->CG->定价PS->BB 全部【串行】" << std::endl;
+                std::cout << "  |     计时口径: 并行时 BP/CG/PS 取墙钟聚合，避免子进程 CPU 时间累加超过总时间" << std::endl;
+            } else {
+                std::cout << "  | >>> 当前模式: 【串行】逐个个体顺序评估" << std::endl;
+                std::cout << "  |     执行方式: 复用同一 BranchAndPrice 对象，个体间 fitnessCache 可命中" << std::endl;
+                std::cout << "  |     未并行原因: ";
+       if (!condParallelFlag) std::cout << "parallel_fitness=false ";
+                if (!condPop)          std::cout << "种群规模<=1 ";
+                if (!condThreads)      std::cout << "可用线程数<=1 ";
+                std::cout << std::endl;
+                std::cout << "  |     下层状态: BP->CG->定价PS->BB 全部串行" << std::endl;
+            }
+            std::cout << "  | 注: 定价子问题 PS 并行开关 parallel_pricing="
+                      << (config->parallel_pricing ? "true" : "false")
+                      << " —— true 时并行逐DC，false 时串行逐DC；线程数配置在 CG 环节横幅始终展示，仅 false 时不生效）" << std::endl;
+            std::cout << "  +---------------------------------------------------------------" << std::endl;
+            evalBannerPrinted = true;
+        }
+
         // 计时：BP 求解（适应度评估）
         auto evalStart = std::chrono::steady_clock::now();
 
         if (parallel && popSize > 1 && numThreads > 1) {
-            // ===== 多进程（fork）并行评估 =====
-            // 每个子进程有独立的 CPLEX 全局状态和内存空间，完全避开 CPLEX 多线程 bug
-            //
-            // 设计：
-            //   1. 每个个体创建一个 pipe（父子进程通信）
-            //   2. fork() 产生子进程，子进程执行 BP 求解
-            //   3. 结果通过 pipe 传回父进程（一个 double）
-            //   4. 父进程 waitpid 回收子进程
-            //   5. 同时最多 numThreads 个子进程运行
+            // 从 config->log_file（run.log 完整路径）派生子进程日志目录
+            // 每个子进程写独立文件 gen_logs/run_gen{代}_ind{个体}.log，
+            // 避免多进程同写 run.log 造成交错乱序（fork 后 logMutex 失效）
+            std::string childLogDir;
+            {
+                std::string logPath = config->log_file;
+                std::string baseDir;
+                size_t slash = logPath.find_last_of("/\\");
+                if (slash != std::string::npos) {
+                    baseDir = logPath.substr(0, slash);
+                } else {
+                    baseDir = ".";
+                }
+                childLogDir = baseDir + "/gen_logs";
+            }
+
+            struct ChildResult {
+                double fitness;
+                double bpTime;
+                double cgTime;
+                double psTime;
+                double bbTime;
+                double cplexBuildTime;
+                double cplexSolveTime;
+                int cgIterations;
+                int cgColumns;
+                int totalNodes;
+                int prunedNodes;
+            };
 
             std::vector<int> childPids(popSize, -1);
-            // 每个 pipe 有两个 fd: [0]=读端(父), [1]=写端(子)
             std::vector<std::array<int, 2>> pipes(popSize);
-
-            // 子进程计数信号量（简单实现：同时最多 N 个）
             int running = 0;
-            int nextIdx = 0;  // 下一个要启动的子进程索引
+            int nextIdx = 0;
+            int targetCompleted = popSize;
 
-            // 累计时间统计（子进程无法传回详细时间，只传 fitness）
-            // 时间统计由父进程在串行段累积
-            double paraBpTime = 0.0;
-            double paraCgTime = 0.0;
-            double paraPsTime = 0.0;
-            double paraBbTime = 0.0;
+            double genBpTime = 0.0;
+            double genCgTime = 0.0;
+            double genPsTime = 0.0;
+            double genBbTime = 0.0;
+            double genCplexBuildTime = 0.0;
+            double genCplexSolveTime = 0.0;
+            int genCgIterations = 0;
+            int genCgColumns = 0;
+            int genTotalNodes = 0;
+            int genPrunedNodes = 0;
 
-            // 启动第一批子进程
-            while (nextIdx < popSize && running < numThreads) {
-                if (pipe(pipes[nextIdx].data()) == -1) {
-                    std::cerr << "[GA] fork: pipe 创建失败" << std::endl;
-                    fitness[nextIdx] = -DBL_MAX;
-                    nextIdx++;
-                    continue;
-                }
+            // 本代并行管理开销计时（墙钟口径，用于量化 fork 并行的额外成本）
+            double genForkTime = 0.0;   // pipe()+fork() 创建子进程
+            double genWaitTime = 0.0;   // waitpid 等待
+            double genMergeTime = 0.0;  // readChild 读管道+聚合
+            auto genWallStart = std::chrono::steady_clock::now();
 
+            auto launchChild = [&](int idx) -> bool {
+                auto forkStart = std::chrono::steady_clock::now();
+                if (pipe(pipes[idx].data()) == -1) return false;
                 pid_t pid = fork();
                 if (pid == -1) {
-                    std::cerr << "[GA] fork: fork 失败" << std::endl;
-                    close(pipes[nextIdx][0]);
-                    close(pipes[nextIdx][1]);
-                    fitness[nextIdx] = -DBL_MAX;
-                    nextIdx++;
-                    continue;
+                    close(pipes[idx][0]);
+                    close(pipes[idx][1]);
+                    return false;
                 }
-
                 if (pid == 0) {
-                    // ===== 子进程 =====
-                    // 关闭读端（子进程只写）
-                    close(pipes[nextIdx][0]);
-
-                    // 子进程需要独立的数据副本（fork 后 COW，但 CPLEX 会写内存）
+                    close(pipes[idx][0]);
                     Instance localInst = inst->deepCopy();
                     BranchAndPrice localBP;
                     localBP.setInstance(localInst);
-                    localBP.setConfig(*config);
-                    // 子进程不输出日志到终端
-                    localBP.setLogger(nullptr);
+                    // 防死锁：GA fork 并行时每个子进程已独占一个 CPU 核，
+                    // 若此时再让子进程内的 CPLEX(RMP) 开多线程，会造成
+                    // popSize 个子进程 × cplex_threads 的线程过度订阅（oversubscription），
+                    // 叠加 CPLEX 全局 license 锁极易死锁/雪崩。
+                    // 故在子进程内强制把 cplex_threads 覆盖为 1（仅影响本子进程的 config 副本，
+                    // 不影响父进程与全串行求解路径）。
+                    Config childConfig = *config;
+                    childConfig.cplex_threads = 1;
+                    localBP.setConfig(childConfig);
+                    // 子进程独立日志：每个个体写自己的文件，互不干扰、可完整回看 CG 明细
+                    // fork 后子进程独占该 Logger，随子进程 _exit 一并销毁
+                    mkdir(childLogDir.c_str(), 0755);
+                    std::string childLogPath = childLogDir + "/run_gen"
+                        + std::to_string(gen) + "_ind" + std::to_string(idx) + ".log";
+                    Logger childLogger;
+                    childLogger.init(childLogPath);
+                    localBP.setLogger(&childLogger);
+                    // 子进程内 CG 明细只写自己的日志文件，不写父终端（否则 N 进程刷屏乱序）
+                    localBP.setConsoleProgress(false);
+                    double result = localBP.solve(all_w[idx], "");
 
-                    double result = localBP.solve(all_w[nextIdx], "");
+                    ChildResult payload{};
+                    payload.fitness = result;
+                    payload.bpTime = localBP.getBPTime();
+                    payload.cgTime = localBP.getCGTime();
+                    payload.psTime = localBP.getPricingTime();
+                    payload.bbTime = localBP.getBBTime();
+                    payload.cplexBuildTime = localBP.getCplexBuildTime();
+                    payload.cplexSolveTime = localBP.getCplexSolveTime();
+                    payload.cgIterations = localBP.getCGIterations();
+                    payload.cgColumns = localBP.getCGTotalColumns();
+                    payload.totalNodes = localBP.getTotalNodes();
+                    payload.prunedNodes = localBP.getPrunedNodes();
 
-                    // 结果写入 pipe
                     ssize_t written = 0;
-                    while (written < (ssize_t)sizeof(double)) {
-                        ssize_t n = write(pipes[nextIdx][1],
-                                          (const char*)&result + written,
-                                          sizeof(double) - written);
+                    while (written < (ssize_t)sizeof(ChildResult)) {
+                        ssize_t n = write(pipes[idx][1], (const char*)&payload + written, sizeof(ChildResult) - written);
                         if (n <= 0) break;
                         written += n;
                     }
-
-                    // 关闭写端，退出子进程
-                    close(pipes[nextIdx][1]);
+                    close(pipes[idx][1]);
+                    childLogger.close();  // _exit 不 flush 流缓冲，需手动刷盘保证子进程日志完整落盘
                     _exit(0);
                 }
-
-                // ===== 父进程 =====
-                // 关闭写端（父进程只读）
-                close(pipes[nextIdx][1]);
-                childPids[nextIdx] = pid;
+                close(pipes[idx][1]);
+                childPids[idx] = pid;
                 running++;
+                genForkTime += std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - forkStart).count();
+                return true;
+            };
+
+            auto readChild = [&](int idx) {
+                auto mergeStart = std::chrono::steady_clock::now();
+                ChildResult payload{};
+                ssize_t totalRead = 0;
+                while (totalRead < (ssize_t)sizeof(ChildResult)) {
+                    ssize_t n = read(pipes[idx][0], (char*)&payload + totalRead, sizeof(ChildResult) - totalRead);
+                    if (n <= 0) break;
+                    totalRead += n;
+                }
+                close(pipes[idx][0]);
+                if (totalRead == (ssize_t)sizeof(ChildResult)) {
+                    fitness[idx] = payload.fitness;
+                    genBpTime += payload.bpTime;
+                    genCgTime += payload.cgTime;
+                    genPsTime += payload.psTime;
+                    genBbTime += payload.bbTime;
+                    genCplexBuildTime += payload.cplexBuildTime;
+                    genCplexSolveTime += payload.cplexSolveTime;
+                    genCgIterations += payload.cgIterations;
+                    genCgColumns += payload.cgColumns;
+                    genTotalNodes += payload.totalNodes;
+                    genPrunedNodes += payload.prunedNodes;
+                } else {
+                    fitness[idx] = -DBL_MAX;
+                }
+                genMergeTime += std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - mergeStart).count();
+            };
+
+            while (nextIdx < popSize && running < numThreads) {
+                if (!launchChild(nextIdx)) {
+                    std::cerr << "[GA] fork: 子进程启动失败" << std::endl;
+                    fitness[nextIdx] = -DBL_MAX;
+                    targetCompleted--;
+                }
                 nextIdx++;
             }
 
-            // 收集所有结果（边等边启动新子进程）
             int completed = 0;
-            while (completed < popSize) {
-                // 等待任意子进程结束
+            while (completed < targetCompleted) {
                 int status;
+                auto waitStart = std::chrono::steady_clock::now();
                 pid_t endedPid = waitpid(-1, &status, 0);
-                if (endedPid <= 0) {
-                    // 没有子进程了
-                    break;
-                }
-
-                // 找到这个 pid 对应的索引
+                genWaitTime += std::chrono::duration<double>(
+                    std::chrono::steady_clock::now() - waitStart).count();
+                if (endedPid <= 0) break;
                 for (int i = 0; i < popSize; i++) {
                     if (childPids[i] == endedPid) {
-                        // 从 pipe 读取结果
-                        double childResult = -DBL_MAX;
-                        ssize_t totalRead = 0;
-                        while (totalRead < (ssize_t)sizeof(double)) {
-                            ssize_t n = read(pipes[i][0],
-                                            (char*)&childResult + totalRead,
-                                            sizeof(double) - totalRead);
-                            if (n <= 0) break;
-                            totalRead += n;
-                        }
-                        close(pipes[i][0]);
-                        fitness[i] = childResult;
-                        childPids[i] = -1;  // 标记已回收
-                        completed++;
+                        readChild(i);
+                        childPids[i] = -1;
                         running--;
-
-                        // 启动下一个待处理的个体
-                        if (nextIdx < popSize) {
-                            if (pipe(pipes[nextIdx].data()) == -1) {
-                                std::cerr << "[GA] fork: pipe 创建失败" << std::endl;
+                        completed++;
+                        while (nextIdx < popSize && running < numThreads) {
+                            if (!launchChild(nextIdx)) {
+                                std::cerr << "[GA] fork: 子进程启动失败" << std::endl;
                                 fitness[nextIdx] = -DBL_MAX;
-                                nextIdx++;
-                                break;
+                                targetCompleted--;
                             }
-
-                            pid_t newPid = fork();
-                            if (newPid == -1) {
-                                std::cerr << "[GA] fork: fork 失败" << std::endl;
-                                close(pipes[nextIdx][0]);
-                                close(pipes[nextIdx][1]);
-                                fitness[nextIdx] = -DBL_MAX;
-                                nextIdx++;
-                                break;
-                            }
-
-                            if (newPid == 0) {
-                                // 子进程
-                                close(pipes[nextIdx][0]);
-                                Instance localInst = inst->deepCopy();
-                                BranchAndPrice localBP;
-                                localBP.setInstance(localInst);
-                                localBP.setConfig(*config);
-                                localBP.setLogger(nullptr);
-                                double result = localBP.solve(all_w[nextIdx], "");
-                                ssize_t written = 0;
-                                while (written < (ssize_t)sizeof(double)) {
-                                    ssize_t n = write(pipes[nextIdx][1],
-                                                    (const char*)&result + written,
-                                                    sizeof(double) - written);
-                                    if (n <= 0) break;
-                                    written += n;
-                                }
-                                close(pipes[nextIdx][1]);
-                                _exit(0);
-                            }
-
-                            // 父进程
-                            close(pipes[nextIdx][1]);
-                            childPids[nextIdx] = newPid;
-                            running++;
                             nextIdx++;
                         }
                         break;
@@ -521,31 +742,57 @@ private:
                 }
             }
 
-            // 清理：如果还有未回收的子进程
-            for (int i = 0; i < popSize; i++) {
-                if (childPids[i] > 0) {
-                    waitpid(childPids[i], nullptr, 0);
-                    close(pipes[i][0]);
-                }
-            }
+            parallelBpTime_ += genBpTime;
+            parallelCgTime_ += genCgTime;
+            parallelPsTime_ += genPsTime;
+            parallelBbTime_ += genBbTime;
+            parallelCplexBuildTime_ += genCplexBuildTime;
+            parallelCplexSolveTime_ += genCplexSolveTime;
+            parallelCgIterations_ += genCgIterations;
+            parallelCgColumns_ += genCgColumns;
+            parallelTotalNodes_ += genTotalNodes;
+            parallelPrunedNodes_ += genPrunedNodes;
 
-            // 时间统计在 fork 模式下不精确（子进程时间无法累加到父进程）
-            // 用粗略估计：用串行段的时间代替
-            if (monitor) {
-                // 大致估计：每个个体平均分配总评估时间
-                double evalTime = std::chrono::duration<double>(
-                    std::chrono::steady_clock::now() - evalStart).count();
-                monitor->reportBPTiming(evalTime * 0.9); // BP 占绝大部分
-            }
+            // 本代 fork 段整体墙钟（含 CPU 调度等待，无法归入任何分项的差额即真实并行开销）
+            double genWall = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - genWallStart).count();
+            parallelForkTime_ += genForkTime;
+            parallelWaitTime_ += genWaitTime;
+            parallelMergeTime_ += genMergeTime;
+            parallelWallTime_ += genWall;
+            serialEquivBpTime_ += genBpTime;  // 各子进程 BP 之和 = 串行跑完这批的等效时间
+            parallelGenerations_++;
+
+            // 暴露给 run() 打印每代并行流水
+            lastGenWall_ = genWall;
+            lastGenSerialEquiv_ = genBpTime;
+            lastGenForkTime_ = genForkTime;
+            lastGenWaitTime_ = genWaitTime;
+            lastGenMergeTime_ = genMergeTime;
+            lastGenCgIterations_ = genCgIterations;
+            lastGenCgColumns_ = genCgColumns;
+            lastGenTotalNodes_ = genTotalNodes;
+            lastGenParallel_ = true;
         } else {
-            // 串行评估
+            // 串行评估：与并行 fork 的 readChild 完全对称——逐个体取「本次求解增量」
+            // 累加到 serial* 累加器，缓存命中（lastCallHitCache）不计入，
+            // 使串行上报给 monitor 的 CG 迭代口径与并行一致。
             for (int i = 0; i < popSize; i++) {
                 std::string label = "个体 #" + std::to_string(i);
 
                 double result = bp.solve(all_w[i], label);
 
                 fitness[i] = result;
+
+                // 仅统计真实发生求解的个体（缓存命中直接返回，不产生 CG 迭代）
+                if (!bp.lastCallHitCache()) {
+                    serialCgIterations_ += bp.getLastCGIterations();
+                    serialCgColumns_ += bp.getLastCGColumns();
+                    serialTotalNodes_ += bp.getLastTotalNodes();
+                    serialPrunedNodes_ += bp.getLastPrunedNodes();
+                }
             }
+            lastGenParallel_ = false;
         }
 
         auto evalEnd = std::chrono::steady_clock::now();
@@ -558,7 +805,13 @@ private:
         // 最终重新评估：日志只写文件（run.log），不输出终端
         bool wasSilent = logger ? logger->isSilent() : false;
         if (logger) logger->setSilent(true);
+        // 临时摘除 monitor：此处仅为拿最优解详情做「1 次」重评估，
+        // 若保留 monitor，bp.solve() 内会用主 bp 对象的 accCGIterations_/accTotalNodes_
+        // 覆盖 run() 中已上报的 parallel*/serial* 累计统计。并行模式下主 bp 只跑这 1 次，
+        // 会把 CG/BB 误报成单次求解值（如 CG=28、BB节点=0），故重评估期间切断上报。
+        bp.setMonitor(nullptr);
         double result = bp.solve(w, "最优解重新评估");
+        bp.setMonitor(monitor);
         if (logger) logger->setSilent(wasSilent);
         Solution sol = bp.getBestSolution();
         sol.totalProfit = result;

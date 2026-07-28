@@ -39,7 +39,12 @@ struct TimingReport {
     double gaEvalTime = 0.0;     // GA 适应度评估（BP 调用累计）
 
     // BP 层 (Level 3)
-    double bpTime = 0.0;         // 分支定价总耗时
+    double bpTime = 0.0;         // 分支定价总耗时（墙钟口径）
+    double bpForkTime = 0.0;     // 并行管理：fork 调用耗时
+    double bpPipeIoTime = 0.0;   // 并行管理：pipe/read/write I/O 耗时
+    double bpWaitTime = 0.0;     // 并行管理：waitpid 等待耗时
+    double bpMergeTime = 0.0;    // 并行管理：父进程聚合结果耗时
+    double bpOtherTime = 0.0;    // BP 未归类耗时（残差）
 
     // CG 层 (Level 2)
     double cgTime = 0.0;         // 列生成总耗时
@@ -71,6 +76,9 @@ struct ExperimentResult {
     // 核心指标
     double totalProfit = 0.0;
     double carbonEmission = 0.0;
+    double carbonCap = 0.0;     // 碳配额 C
+    double ePlus = 0.0;         // 超额需购买的碳量 max(E-C, 0)
+    double eMinus = 0.0;        // 富余可出售的碳量 max(C-E, 0)
     double solveTime = 0.0;
     int numDCsOpen = 0;
     int numRtsServed = 0;
@@ -84,6 +92,10 @@ struct ExperimentResult {
 
     // 时间分布
     TimingReport timing;
+
+    // 完整报告文本（由 Monitor 生成，供终端/run.log/report.txt 统一使用）
+    std::string timingReportText;
+    std::string summaryText;
 
     // 最优解详情
     std::vector<double> bestW;

@@ -3,13 +3,15 @@
 
 #include "../10_common/Types.h"
 #include "../5_result/ExperimentResult.h"
-#include <vector>
-#include <string>
+#include <algorithm>
 #include <chrono>
-#include <iostream>
-#include <iomanip>
-#include <fstream>
 #include <cmath>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
 
 /**
  * 监控模块（Monitor）— 运行时仪表盘 + 时间统计中心
@@ -75,9 +77,20 @@ public:
         gaEvalTime_ = evalTime;
     }
 
-    /** BP 层：分支定价总时间 */
+    /** BP 层：分支定价总时间（墙钟口径） */
     void reportBPTiming(double bpTime) {
         bpTime_ = bpTime;
+    }
+
+    /** BP 并行管理开销（诊断口径） */
+    void reportBPParallelOverhead(double forkTime,
+                                  double pipeIoTime,
+                                  double waitTime,
+                                  double mergeTime) {
+        bpForkTime_ = forkTime;
+        bpPipeIoTime_ = pipeIoTime;
+        bpWaitTime_ = waitTime;
+        bpMergeTime_ = mergeTime;
     }
 
     /** CG 层：列生成总时间 + CPLEX 细分时间 */
@@ -156,7 +169,16 @@ public:
         t.gaMutateTime = gaMutateTime_;
         t.gaDecodeTime = gaDecodeTime_;
         t.gaEvalTime = gaEvalTime_;
+
         t.bpTime = bpTime_;
+        t.bpForkTime = bpForkTime_;
+        t.bpPipeIoTime = bpPipeIoTime_;
+        t.bpWaitTime = bpWaitTime_;
+        t.bpMergeTime = bpMergeTime_;
+        t.bpOtherTime = std::max(
+            0.0,
+            bpTime_ - cgTime_ - bbTime_ - bpForkTime_ - bpPipeIoTime_ - bpWaitTime_ - bpMergeTime_);
+
         t.cgTime = cgTime_;
         t.cplexBuildTime = cplexBuildTime_;
         t.cplexSolveTime = cplexSolveTime_;
@@ -182,6 +204,10 @@ public:
         totalColumns_ = 0;
         gaTime_ = 0.0;
         bpTime_ = 0.0;
+        bpForkTime_ = 0.0;
+        bpPipeIoTime_ = 0.0;
+        bpWaitTime_ = 0.0;
+        bpMergeTime_ = 0.0;
         cgTime_ = 0.0;
         pricingTime_ = 0.0;
         bbTime_ = 0.0;
@@ -201,47 +227,121 @@ public:
     void setTotalGenerations(int total) { totalGenerations_ = total; }
     void reportGAGenerations(int total) { totalGAGenerations_ = total; }
 
-    // ===== 打印时间分布（树形缩进） =====
-    void printTimingReport() const {
-        double total = getElapsedSeconds();
-        std::cout << std::fixed << std::setprecision(4);
-        std::cout << "\n========== 时间分布报告 ==========" << std::endl;
-        std::cout << "总耗时:          " << total << "s (100%)" << std::endl;
-        // 调试信息已移除
-        auto printLine = [total](const std::string& name, double t) {
-            if (total > 0) {
-                std::cout << "  " << std::left << std::setw(18) << name
-                          << std::right << std::setw(10) << std::setprecision(4) << t << "s ("
-                          << std::setw(5) << std::setprecision(1) << (t / total * 100) << "%)"
-                          << std::endl;
+    // ===== 构建时间分布文本（双报表：墙钟树 + 诊断树） =====
+    // 与 printTimingReport 输出一致，但返回字符串，便于同时写入终端和日志文件。
+    std::string formatTimingReport() const {
+        const TimingReport t = buildTimingReport();
+        std::ostringstream os;
+        os << std::fixed << std::setprecision(4);
+
+        auto residual = [](double parent, std::initializer_list<double> children) {
+            double sum = 0.0;
+            for (double c : children) {
+                sum += c;
             }
+            return std::max(0.0, parent - sum);
         };
-        printLine("GA 搜索", gaTime_);
-        printLine("├─ 选择", gaSelectTime_);
-        printLine("├─ 交叉", gaCrossoverTime_);
-        printLine("├─ 变异", gaMutateTime_);
-        printLine("├─ 解码", gaDecodeTime_);
-        printLine("├─ 适应度评估", gaEvalTime_);
-        printLine("│  └─ 分支定价(BP)", bpTime_);
-        printLine("│     ├─ 列生成(CG)", cgTime_);
-        printLine("│     │  ├─ CPLEX构建", cplexBuildTime_);
-        printLine("│     │  ├─ CPLEX求解", cplexSolveTime_);
-        printLine("│     │  └─ 定价子问题(PS)", pricingTime_);
-        printLine("│     └─ 分支定界(BB)", bbTime_);
-        printLine("后处理", postTime_);
-        printLine("日志输出", logTime_);
-        std::cout << "==================================" << std::endl;
+
+        auto print_node = [&os](const std::string& name, double value,
+                                double parent, int indent) {
+            if (parent <= 0.0) {
+                return;
+            }
+            os << std::string(indent, ' ')
+               << std::left << std::setw(24) << name
+               << std::right << std::setw(10) << value << "s ("
+             << std::setw(6) << std::setprecision(1)
+               << (value / parent * 100.0) << "%)" << std::setprecision(4)
+               << "\n";
+        };
+
+        const double total_other = residual(t.solveTime, {t.gaTime, t.postTime, t.logTime});
+        const double ga_other = residual(
+            t.gaTime,
+            {t.gaSelectTime, t.gaCrossoverTime, t.gaMutateTime, t.gaDecodeTime, t.gaEvalTime});
+        const double eval_other = residual(t.gaEvalTime, {t.bpTime});
+        const double bp_wall_other = residual(t.bpTime, {t.cgTime, t.bbTime});
+        const double cg_other = residual(t.cgTime, {t.cplexBuildTime, t.cplexSolveTime, t.pricingTime});
+
+        os << "\n========== 时间分布报告（墙钟树） ==========" << "\n";
+        os << "总耗时                  " << t.solveTime << "s (100%)" << "\n";
+        print_node("GA 搜索", t.gaTime, t.solveTime, 2);
+        print_node("总耗时 other", total_other, t.solveTime, 2);
+        print_node("后处理", t.postTime, t.solveTime, 2);
+        print_node("日志输出", t.logTime, t.solveTime, 2);
+
+        print_node("选择", t.gaSelectTime, t.gaTime, 4);
+        print_node("交叉", t.gaCrossoverTime, t.gaTime, 4);
+        print_node("变异", t.gaMutateTime, t.gaTime, 4);
+        print_node("解码", t.gaDecodeTime, t.gaTime, 4);
+        print_node("适应度评估", t.gaEvalTime, t.gaTime, 4);
+        print_node("GA other", ga_other, t.gaTime, 4);
+
+        print_node("分支定价(BP)", t.bpTime, t.gaEvalTime, 6);
+        print_node("评估 other", eval_other, t.gaEvalTime, 6);
+
+        print_node("列生成(CG)", t.cgTime, t.bpTime, 8);
+        print_node("分支定界(BB)", t.bbTime, t.bpTime, 8);
+        print_node("BP other(墙钟)", bp_wall_other, t.bpTime, 8);
+
+        print_node("CPLEX构建", t.cplexBuildTime, t.cgTime, 10);
+        print_node("CPLEX求解", t.cplexSolveTime, t.cgTime, 10);
+        print_node("定价子问题(PS)", t.pricingTime, t.cgTime, 10);
+        print_node("CG other", cg_other, t.cgTime, 10);
+
+        os << "\n========== 时间分布报告（诊断树） ==========" << "\n";
+        os << "BP墙钟总时间             " << t.bpTime << "s (100%)" << "\n";
+        print_node("列生成(CG)", t.cgTime, t.bpTime, 2);
+        print_node("分支定界(BB)", t.bbTime, t.bpTime, 2);
+        print_node("并行fork", t.bpForkTime, t.bpTime, 2);
+        print_node("并行pipe I/O", t.bpPipeIoTime, t.bpTime, 2);
+        print_node("并行wait", t.bpWaitTime, t.bpTime, 2);
+        print_node("并行merge", t.bpMergeTime, t.bpTime, 2);
+        print_node("BP未归类(other)", t.bpOtherTime, t.bpTime, 2);
+
+        print_node("CPLEX构建", t.cplexBuildTime, t.cgTime, 4);
+        print_node("CPLEX求解", t.cplexSolveTime, t.cgTime, 4);
+        print_node("定价子问题(PS)", t.pricingTime, t.cgTime, 4);
+        print_node("CG other", cg_other, t.cgTime, 4);
+        os << "==========================================";
+        return os.str();
+    }
+
+    // ===== 构建统计摘要文本 =====
+    std::string formatSummary() const {
+        std::ostringstream os;
+        os << std::fixed << std::setprecision(4);
+        os << "===== 求解统计 =====" << "\n";
+        os << "总分支节点数: " << totalBranchNodes_ << "\n";
+        os << "剪枝节点数: " << prunedNodes_ << "\n";
+        os << "列生成迭代次数: " << columnGenIterations_ << "\n";
+        os << "总列数: " << totalColumns_ << "\n";
+        // 派生指标：拆分"迭代总数"到底来自"节点多"还是"每节点迭代多"
+        if (totalBranchNodes_ > 0) {
+            double iterPerNode =
+                static_cast<double>(columnGenIterations_) / totalBranchNodes_;
+            double colPerNode =
+                static_cast<double>(totalColumns_) / totalBranchNodes_;
+            os << "平均每节点CG迭代: " << iterPerNode << "\n";
+            os << "平均每节点生成列: " << colPerNode << "\n";
+        }
+        if (columnGenIterations_ > 0) {
+            double colPerIter =
+                static_cast<double>(totalColumns_)/ columnGenIterations_;
+            os << "平均每迭代加列: " << colPerIter << "\n";
+        }
+        os << "=========================";
+        return os.str();
+    }
+
+    // ===== 打印时间分布（双报表：墙钟树 + 诊断树） =====
+    void printTimingReport() const {
+        std::cout << formatTimingReport()<< std::endl;
     }
 
     // ===== 打印统计摘要 =====
     void printSummary() const {
-        std::cout << std::fixed << std::setprecision(4);
-        std::cout << "===== 求解统计 =====" << std::endl;
-        std::cout << "总分支节点数: " << totalBranchNodes_ << std::endl;
-        std::cout << "剪枝节点数: " << prunedNodes_ << std::endl;
-        std::cout << "列生成迭代次数: " << columnGenIterations_ << std::endl;
-        std::cout << "总列数: " << totalColumns_ << std::endl;
-        std::cout << "=========================" << std::endl;
+        std::cout << formatSummary() << std::endl;
     }
 
 private:
@@ -272,6 +372,10 @@ private:
 
     // BP 层
     double bpTime_ = 0.0;
+    double bpForkTime_ = 0.0;
+    double bpPipeIoTime_ = 0.0;
+    double bpWaitTime_ = 0.0;
+    double bpMergeTime_ = 0.0;
 
     // CG 层
     double cgTime_ = 0.0;

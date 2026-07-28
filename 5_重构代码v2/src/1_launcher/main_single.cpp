@@ -9,7 +9,7 @@
 
 // ===== 在这里改路径切换配置 =====
 static const std::string CONFIG_PATH =
-    "/home/pei_zeyu/projects/cplex_code/5_\xe9\x87\x8d\xe6\x9e\x84\xe4\xbb\xa3\xe7\xa0\x81v2/src/1_launcher/configs/delta3000.yaml";
+    "/home/peizeyu2026/smart_wolf_project/ZTT-OR/20260715 ZTT-OR/5_重构代码v2/src/1_launcher/configs/diag_10x30_multicol3.yaml";
 // ================================
 
 int main() {

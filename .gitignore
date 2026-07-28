@@ -1,17 +1,26 @@
 # 私人工作数据
 .claude/
 
-# 实验结果
+# 实验结果（统一落到 5_重构代码v2/results，根目录不应再出现）
+results/
 results_*/
 results_single/**
 
 # 构建产物
 *.o
 *.d
+bin/
 bin/ga_bp
 bin/batch
+
+# 误建的空 LFS 目录（真正的 LFS 数据在 .git/lfs）
+/lfs/
 
 # 系统文件
 .DS_Store
 *.swp
 *.swo
+
+# 日志文件
+*.log
+bb_regression_summary.txt

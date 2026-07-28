@@ -1,0 +1,38 @@
+# 回到初心：验证对偶平滑是否真带来加速——四格 smoothON vs smoothOFF 轮数对比
+plan_name: "平滑价值验证-ON/OFF对照"
+population_size: 1
+max_generation: 1
+delta: 3000
+holding_cost: 10.0
+random_seed: 32501
+max_cg_iterations: 300
+cg_early_stop: true
+cg_stall_tolerance: 0.0001
+cg_stall_iterations: 15
+max_branch_nodes: 10000
+parallel_pricing: false
+experiments:
+  - name: "20x70_w05_ON"
+    num_dc: 20
+    num_retailers: 70
+    min_w: 0.5
+    max_w: 0.5
+    dual_smooth_alpha: 0.5
+  - name: "20x70_w05_OFF"
+    num_dc: 20
+    num_retailers: 70
+    min_w: 0.5
+    max_w: 0.5
+    dual_smooth_alpha: 0.0
+  - name: "30x100_w05_ON"
+    num_dc: 30
+    num_retailers: 100
+    min_w: 0.5
+    max_w: 0.5
+    dual_smooth_alpha: 0.5
+  - name: "30x100_w05_OFF"
+    num_dc: 30
+    num_retailers: 100
+    min_w: 0.5
+    max_w: 0.5
+    dual_smooth_alpha: 0.0

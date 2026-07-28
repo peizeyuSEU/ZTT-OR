@@ -1,0 +1,33 @@
+plan_name: "w扫描 40x150 w=0.3"
+plan_desc: "固定w=0.3单次求解,观测CG轮数与分支节点"
+
+# ===== 公共基准参数 =====
+num_dc: 40
+num_retailers: 150
+population_size: 1
+max_generation: 1
+crossover_rate: 0.7
+mutation_rate: 0.2
+chromosome_length: 10
+carbon_price: 2.0
+carbon_cap: 100000.0
+delta: 3000
+holding_cost: 10.0
+random_seed: 32501
+min_w: 0.3
+max_w: 0.3
+use_sqrt_investment: true
+early_stop: false         # 关GA层早停,各组代数一致
+parallel_fitness: false   # GA串行,避免fork子进程强制回退干扰CPLEX/定价线程观测
+
+# CG层收敛控制:大规模相对改善判据(1e-6)太严会跑数千轮,放宽+设上限保证可比
+max_cg_iterations: 300    # CG最大迭代轮数上限,防尾部无效迭代失控
+cg_early_stop: true
+cg_stall_tolerance: 0.0001  # 相对改善<1e-4即视为收敛(默认1e-6在大规模永不触发)
+cg_stall_iterations: 15
+
+experiments:
+  - name: "S1_Serial"
+    parallel_pricing: false
+    pricing_threads: 4
+    cplex_threads: 1

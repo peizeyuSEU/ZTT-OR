@@ -1,0 +1,97 @@
+# ============================================================
+# 10×30 诊断配置：对偶变量冻结+退化维度诊断
+# 基于delta3000.yaml，关闭对偶平滑，串行运行，CG早停放宽
+# ============================================================
+
+# ===== 问题规模 =====
+num_dc: 10
+num_retailers: 30
+
+# ===== 遗传算法参数 =====
+population_size: 30
+max_generation: 50
+crossover_rate: 0.7
+mutation_rate: 0.2
+elitism: true
+chromosome_length: 10
+min_w: 0.0
+max_w: 1.0
+
+# ===== 碳交易参数 =====
+carbon_price: 2.0
+carbon_cap: 100000.0
+inv_carbon_coeff: 2.0
+transport_carbon_coeff: 0.01
+fac_carbon_ratio: 0.1
+
+# ===== 减排参数 =====
+delta: 3000.0
+
+# ===== 服务水平 =====
+service_level: 0.975
+z_alpha: 1.96
+
+# ===== 成本参数 =====
+order_fixed_cost: 100.0
+transport_fixed_cost: 100.0
+lead_time: 1.0
+holding_cost: 10.0
+
+# ===== 随机种子 =====
+random_seed: 32501
+
+# ===== 数据生成范围 =====
+coord_min: 0.0
+coord_max: 1000.0
+mu_min: 2000.0
+mu_max: 3500.0
+var_min: 10.0
+var_max: 15.0
+fixed_cost_min: 7000.0
+fixed_cost_max: 10000.0
+reserve_price_min: 60.0
+reserve_price_max: 80.0
+supplier_x: 500.0
+supplier_y: 500.0
+
+# ===== 输出控制 =====
+verbose: false
+output_dir: results
+log_file: ""
+
+# ===== 分支定界参数 =====
+rc_eps: 1.0e-6
+max_branch_nodes: 50
+use_dfs: true
+
+# ===== 公式模型选择 =====
+use_sqrt_investment: true
+
+# ===== 定价子问题算法选择 =====
+pricing_algorithm: 0
+
+# ===== 并行：串行以简化诊断 =====
+parallel_fitness: false
+num_threads: 1
+parallel_pricing: false
+pricing_threads: 1
+cplex_threads: 1
+
+# ===== 提前停止参数 =====
+early_stop: true
+convergence_generations: 12
+convergence_tolerance: 0.0005
+
+# ===== 列生成 tailing-off 早停参数 =====
+# 放宽以观察完整冻结过程
+cg_early_stop: true
+cg_stall_iterations: 15
+cg_stall_tolerance: 1.0e-5
+max_cg_iterations: 500
+
+# ===== 对偶平滑：关闭 =====
+dual_smooth_alpha: 0
+
+# ===== 兼容模式 =====
+legacy_mode: false
+run_mode: "ga"

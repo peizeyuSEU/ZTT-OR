@@ -47,6 +47,15 @@ public:
         startTime = std::chrono::steady_clock::now();
     }
 
+    /** 显式刷盘并关闭文件。用于 fork 子进程在 _exit 前保证日志落盘
+     *  （_exit 不调用析构，也不 flush C++ 流缓冲，需手动调用） */
+    void close() {
+        if (logFile.is_open()) {
+            logFile.flush();
+            logFile.close();
+        }
+    }
+
     void setSilent(bool s) { silent = s; }
     bool isSilent() const { return silent; }
     void setConsoleMode(bool on) { consoleMode_ = on; }
@@ -178,6 +187,22 @@ public:
         std::cout << line << std::endl;
         if (logFile.is_open()) {
             logFile << line << std::endl;
+        }
+    }
+
+    /**
+     * 原样写入一行（不加层级前缀/缩进）。
+     *
+     * 用于写入已排版好的多行报表（如时间分布树），
+     * 保持在 run.log 中的对齐格式。终端是否输出由 consoleMode_ 控制。
+     */
+    void raw(const std::string& msg) {
+        std::lock_guard<std::mutex> lock(logMutex);
+        if (!silent && consoleMode_) {
+            std::cout << msg << std::endl;
+        }
+        if (logFile.is_open()) {
+            logFile << msg << std::endl;
         }
     }
 };

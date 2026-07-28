@@ -73,8 +73,21 @@ use_dfs: true
 # 公式模型选择
 use_sqrt_investment: true
 
-# 定价子问题算法选择
-use_paper_algorithm3: false
+# 定价子问题算法选择（选定主方案 0=Simplified，利润最优、对齐论文）
+pricing_algorithm: 0
+
+# 提前停止参数（与单跑基线一致，加速批量）
+early_stop: true
+convergence_generations: 12
+convergence_tolerance: 0.0005
+cg_early_stop: true
+cg_stall_iterations: 8
+cg_stall_tolerance: 1.0e-5
+
+# 并行参数
+parallel_fitness: true
+num_threads: 0
+parallel_pricing: true
 
 # 兼容模式
 legacy_mode: false

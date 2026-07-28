@@ -1,0 +1,32 @@
+plan_name: "pricing_budget"
+plan_desc: "验证方案B核预算受控的并行定价:GA串行下定价放开到pricing_threads,解须与串行现状一致"
+
+# ===== 公共基准参数(所有实验条目继承,可被条目覆盖) =====
+num_dc: 10
+num_retailers: 30
+population_size: 30
+max_generation: 50
+crossover_rate: 0.7
+mutation_rate: 0.2
+chromosome_length: 10
+carbon_price: 2.0
+carbon_cap: 100000.0
+delta: 3000
+holding_cost: 10.0
+random_seed: 32501
+use_sqrt_investment: true
+early_stop: false          # 关早停,跑满50代,便于与串行现状逐点对齐
+parallel_fitness: false    # GA串行 => 核预算下GA进程数=1,定价可用满pricing_threads
+
+experiments:
+  # 基准: 串行定价(现状), 作为解与耗时参照
+  - name: "Serial"
+    pricing_algorithm: 0
+    parallel_pricing: false
+
+  # 待验证: 并行定价+核预算, GA串行 => 定价放开到 min(10,4,8/1)=4 线程
+  - name: "ParBudget4"
+    pricing_algorithm: 0
+    parallel_pricing: true
+    pricing_threads: 4
+    core_budget: 8
