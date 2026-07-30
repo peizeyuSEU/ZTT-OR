@@ -12,6 +12,7 @@
 #include "../5_result/ExperimentResult.h"
 #include "../5_result/ResultWriter.h"
 #include "../6_preprocessor/DataGenerator.h"
+#include "../7_formula/05_InvestmentCost.h"
 #include "../8_solver/05_GeneticAlgorithm.h"
 #include "../8_solver/04_BranchAndPrice.h"
 #include "../9_postprocessor/01_PostProcessor.h"
@@ -261,12 +262,37 @@ private:
         // 填充 ResultWriter
         resultWriter_.setMeta("exp", instance_->numDC, instance_->numRetailer,
                                config_.delta, config_.random_seed);
+        resultWriter_.setConfigMeta(config_);
         int gaGens = static_cast<int>(monitor_.convergenceHistory().size());
         resultWriter_.collectFrom(monitor_, w, profit, emission, solveTime,
                                    dcOpen, rtServed, monitor_.totalBranchNodes(),
                                    gaGens, instance_->C);
         resultWriter_.setSolution(sol.dcSolutions);
         resultWriter_.setSolveCertification(sol);
+        double totalInvestmentCost = 0.0;
+        if (sol.hasIntegerSolution) {
+            for (const auto& dcSol : sol.dcSolutions) {
+                if (dcSol.dcIndex < 0 || dcSol.dcIndex >= instance_->numDC) {
+                    continue;
+                }
+                double demand = 0.0;
+                for (int i = 0;
+                     i < instance_->numRetailer
+                         && i < static_cast<int>(dcSol.S.size());
+                     ++i) {
+                    if (dcSol.S[i] == 1) demand += instance_->mu[i];
+                }
+                if (demand <= 0.0) continue;
+                const int j = dcSol.dcIndex;
+                const double wj =
+                    j < static_cast<int>(w.size()) ? w[j] : 0.0;
+                totalInvestmentCost += InvestmentCostFormula::compute(
+                    *instance_, j, wj, demand,
+                    config_.use_sqrt_investment,
+                    config_.investment_exponent);
+            }
+        }
+        resultWriter_.setTotalInvestmentCost(totalInvestmentCost);
 
         // 保存报告
         std::string reportFile = outputDir_ + "report.txt";
@@ -277,6 +303,10 @@ private:
         std::string csvFile = outputDir_ + "convergence.csv";
         resultWriter_.saveConvergenceCSV(csvFile);
         std::cout << "收敛曲线已保存至: " << csvFile << std::endl;
+
+        std::string resultCsvFile = outputDir_ + "result.csv";
+        resultWriter_.saveResultCSV(resultCsvFile);
+        std::cout << "统一结果表已保存至: " << resultCsvFile << std::endl;
 
         // 控制台输出摘要
         std::cout << "\n========== 最终结果 ==========" << std::endl;

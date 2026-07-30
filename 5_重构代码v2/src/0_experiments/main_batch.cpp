@@ -171,6 +171,7 @@ int main(int argc, char** argv) {
 
     // 6. 输出汇总对比表格
     ResultWriter::saveExperimentTable(expDir + "/summary.txt", allResults);
+    ResultWriter::saveExperimentCSV(expDir + "/summary.csv", allResults);
 
     std::cout << "\n========== 批量实验完成 ==========" << std::endl;
     std::cout << "结果已保存至: " << expDir << std::endl;

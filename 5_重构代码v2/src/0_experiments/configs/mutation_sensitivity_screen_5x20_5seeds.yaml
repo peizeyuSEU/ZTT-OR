@@ -1,0 +1,110 @@
+plan_name: "mutation_sensitivity_screen_5x20_5seeds"
+plan_desc: "GA逐位变异率配对筛选：5个seed，每个seed比较1/L、0.01、0.05、0.10、0.20"
+
+num_dc: 5
+num_retailers: 20
+run_mode: ga
+
+population_size: 12
+max_generation: 8
+crossover_rate: 0.7
+chromosome_length: 10
+elitism: true
+early_stop: false
+
+use_sqrt_investment: true
+investment_exponent: 0.5
+use_invest_in_column: true
+
+pricing_algorithm: 0
+pricing_max_cols_per_dc: 1
+max_cg_iterations: 1000
+cg_early_stop: false
+max_branch_nodes: 10000
+bp_time_limit_sec: 600
+bp_relative_gap: 0
+
+parallel_fitness: false
+parallel_pricing: false
+cplex_threads: 1
+
+experiments:
+  - name: "seed32501_adaptive"
+    random_seed: 32501
+    mutation_rate: -1
+  - name: "seed32501_m001"
+    random_seed: 32501
+    mutation_rate: 0.01
+  - name: "seed32501_m005"
+    random_seed: 32501
+    mutation_rate: 0.05
+  - name: "seed32501_m010"
+    random_seed: 32501
+    mutation_rate: 0.10
+  - name: "seed32501_m020"
+    random_seed: 32501
+    mutation_rate: 0.20
+
+  - name: "seed32502_adaptive"
+    random_seed: 32502
+    mutation_rate: -1
+  - name: "seed32502_m001"
+    random_seed: 32502
+    mutation_rate: 0.01
+  - name: "seed32502_m005"
+    random_seed: 32502
+    mutation_rate: 0.05
+  - name: "seed32502_m010"
+    random_seed: 32502
+    mutation_rate: 0.10
+  - name: "seed32502_m020"
+    random_seed: 32502
+    mutation_rate: 0.20
+
+  - name: "seed32503_adaptive"
+    random_seed: 32503
+    mutation_rate: -1
+  - name: "seed32503_m001"
+    random_seed: 32503
+    mutation_rate: 0.01
+  - name: "seed32503_m005"
+    random_seed: 32503
+    mutation_rate: 0.05
+  - name: "seed32503_m010"
+    random_seed: 32503
+    mutation_rate: 0.10
+  - name: "seed32503_m020"
+    random_seed: 32503
+    mutation_rate: 0.20
+
+  - name: "seed32504_adaptive"
+    random_seed: 32504
+    mutation_rate: -1
+  - name: "seed32504_m001"
+    random_seed: 32504
+    mutation_rate: 0.01
+  - name: "seed32504_m005"
+    random_seed: 32504
+    mutation_rate: 0.05
+  - name: "seed32504_m010"
+    random_seed: 32504
+    mutation_rate: 0.10
+  - name: "seed32504_m020"
+    random_seed: 32504
+    mutation_rate: 0.20
+
+  - name: "seed32505_adaptive"
+    random_seed: 32505
+    mutation_rate: -1
+  - name: "seed32505_m001"
+    random_seed: 32505
+    mutation_rate: 0.01
+  - name: "seed32505_m005"
+    random_seed: 32505
+    mutation_rate: 0.05
+  - name: "seed32505_m010"
+    random_seed: 32505
+    mutation_rate: 0.10
+  - name: "seed32505_m020"
+    random_seed: 32505
+    mutation_rate: 0.20

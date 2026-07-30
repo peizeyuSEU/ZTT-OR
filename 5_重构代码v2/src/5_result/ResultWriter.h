@@ -11,6 +11,8 @@
 #include <iostream>
 #include <iomanip>
 #include <vector>
+#include <sstream>
+#include <cmath>
 
 /**
  * 实验结果输出模块
@@ -33,6 +35,8 @@ public:
         result_.carbonCap = carbonCap;
         result_.ePlus = emission > carbonCap ? emission - carbonCap : 0.0;
         result_.eMinus = carbonCap > emission ? carbonCap - emission : 0.0;
+        result_.netCarbonTradingCost =
+            result_.carbonPrice * (emission - carbonCap);
         result_.solveTime = solveTime;
         result_.numDCsOpen = dcOpen;
         result_.numRtsServed = rtServed;
@@ -59,6 +63,21 @@ public:
         result_.randomSeed = seed;
     }
 
+    void setConfigMeta(const Config& config) {
+        result_.investmentExponent = config.investment_exponent;
+        result_.configuredMutationRate = config.mutation_rate;
+        const int totalBits =
+            std::max(1, config.num_dc * config.chromosome_length);
+        result_.effectiveMutationRate =
+            config.mutation_rate > 0.0
+                ? config.mutation_rate
+                : 1.0 / static_cast<double>(totalBits);
+        result_.carbonPrice = config.carbon_price;
+        result_.pricingAlgorithm = config.pricing_algorithm;
+        result_.pricingMaxColsPerDC = config.pricing_max_cols_per_dc;
+        result_.runMode = config.run_mode;
+    }
+
     void setSolution(const std::vector<DCSolution>& dcSol) {
         result_.dcSolutions = dcSol;
     }
@@ -68,6 +87,11 @@ public:
         result_.bestBound = sol.bestBound;
         result_.relativeGap = sol.relativeGap;
         result_.hasIntegerSolution = sol.hasIntegerSolution;
+        result_.totalInvestmentCost = sol.totalInvestmentCost;
+    }
+
+    void setTotalInvestmentCost(double cost) {
+        result_.totalInvestmentCost = cost;
     }
 
     const ExperimentResult& getResult() const { return result_; }
@@ -270,6 +294,78 @@ public:
         file.close();
     }
 
+    /** 保存单次实验的一行统一机器可读结果。 */
+    void saveResultCSV(const std::string& path) const {
+        saveExperimentCSV(path, std::vector<ExperimentResult>{result_});
+    }
+
+    /** 保存可直接合并分析的统一 CSV 结果表。 */
+    static void saveExperimentCSV(
+            const std::string& path,
+            const std::vector<ExperimentResult>& results) {
+        std::ofstream file(path);
+        if (!file.is_open()) {
+            std::cerr << "[ResultWriter] 无法写入 " << path << std::endl;
+            return;
+        }
+        file
+            << "experiment_name,outcome,inner_bp_status,has_integer_solution,"
+            << "run_mode,num_dc,num_retailers,random_seed,delta,"
+            << "investment_exponent,pricing_algorithm,pricing_max_cols_per_dc,"
+            << "configured_mutation_rate,effective_mutation_rate,mutation_active,"
+            << "total_profit,inner_bp_best_bound,inner_bp_relative_gap,"
+            << "carbon_emission,"
+            << "carbon_cap,e_plus,e_minus,net_carbon_trading_cost,"
+            << "total_investment_cost,num_dc_open,num_retailers_served,"
+            << "branch_nodes,pruned_nodes,cg_iterations,total_columns,"
+            << "ga_generations,solve_time,ga_time,bp_time,cg_time,"
+            << "pricing_time,cplex_build_time,cplex_solve_time,bb_time,best_w\n";
+        file << std::setprecision(15);
+        for (const auto& r : results) {
+            file << csvEscape(r.experimentName) << ","
+                 << (r.runMode == "ga"
+                         ? (r.hasIntegerSolution
+                                ? "HEURISTIC_BEST_FOUND"
+                                : "NO_FEASIBLE_SOLUTION_FOUND")
+                         : solveOutcomeName(
+                               r.solveStatus, r.hasIntegerSolution))
+                 << ","
+                 << solveStatusName(r.solveStatus) << ","
+                 << (r.hasIntegerSolution ? 1 : 0) << ","
+                 << csvEscape(r.runMode) << ","
+                 << r.numDC << "," << r.numRetailers << ","
+                 << r.randomSeed << "," << r.delta << ","
+                 << r.investmentExponent << ","
+                 << r.pricingAlgorithm << "," << r.pricingMaxColsPerDC << ","
+                 << r.configuredMutationRate << ","
+                 << r.effectiveMutationRate << ","
+                 << (r.runMode == "ga" ? 1 : 0) << ",";
+            if (r.hasIntegerSolution) writeFinite(file, r.totalProfit);
+            file << ",";
+            writeFinite(file, r.bestBound);
+            file << ",";
+            writeFinite(file, r.relativeGap);
+            file << ",";
+            if (r.hasIntegerSolution) {
+                file << r.carbonEmission << "," << r.carbonCap << ","
+                     << r.ePlus << "," << r.eMinus << ","
+                     << r.netCarbonTradingCost << ","
+                     << r.totalInvestmentCost << ","
+                     << r.numDCsOpen << "," << r.numRtsServed;
+            } else {
+                file << ",,,,,,,";
+            }
+            file << "," << r.totalBranchNodes << "," << r.prunedNodes << ","
+                 << r.totalCGIterations << "," << r.totalColumnsGenerated << ","
+                 << r.totalGAGenerations << "," << r.solveTime << ","
+                 << r.timing.gaTime << "," << r.timing.bpTime << ","
+                 << r.timing.cgTime << "," << r.timing.pricingTime << ","
+                 << r.timing.cplexBuildTime << ","
+                 << r.timing.cplexSolveTime << "," << r.timing.bbTime << ","
+                 << csvEscape(vectorToString(r.bestW)) << "\n";
+        }
+    }
+
     /** 保存批量实验对比表格（含时间分布） */
     static void saveExperimentTable(const std::string& path,
                                      const std::vector<ExperimentResult>& results) {
@@ -329,6 +425,35 @@ public:
     }
 
 private:
+    static std::string csvEscape(const std::string& value) {
+        if (value.find_first_of(",\"\n\r") == std::string::npos) {
+            return value;
+        }
+        std::string escaped = "\"";
+        for (char c : value) {
+            if (c == '"') escaped += '"';
+            escaped += c;
+        }
+        escaped += '"';
+        return escaped;
+    }
+
+    static std::string vectorToString(const std::vector<double>& values) {
+        std::ostringstream out;
+        out << std::setprecision(15);
+        for (size_t i = 0; i < values.size(); ++i) {
+            if (i > 0) out << ";";
+            out << values[i];
+        }
+        return out.str();
+    }
+
+    static void writeFinite(std::ofstream& file, double value) {
+        if (std::isfinite(value) && std::abs(value) < DBL_MAX / 2) {
+            file << value;
+        }
+    }
+
     ExperimentResult result_;
 };
 

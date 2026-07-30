@@ -72,6 +72,13 @@ struct ExperimentResult {
     int numRetailers = 0;
     double delta = 0.0;
     int randomSeed = 0;
+    double investmentExponent = 0.5;
+    double configuredMutationRate = -1.0;
+    double effectiveMutationRate = 0.0;
+    double carbonPrice = 0.0;
+    int pricingAlgorithm = 0;
+    int pricingMaxColsPerDC = 1;
+    std::string runMode;
 
     // 核心指标
     double totalProfit = 0.0;
@@ -79,6 +86,8 @@ struct ExperimentResult {
     double carbonCap = 0.0;     // 碳配额 C
     double ePlus = 0.0;         // 超额需购买的碳量 max(E-C, 0)
     double eMinus = 0.0;        // 富余可出售的碳量 max(C-E, 0)
+    double netCarbonTradingCost = 0.0;
+    double totalInvestmentCost = 0.0;
     double solveTime = 0.0;
     int numDCsOpen = 0;
     int numRtsServed = 0;
