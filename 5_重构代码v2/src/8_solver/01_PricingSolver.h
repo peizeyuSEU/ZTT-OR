@@ -244,10 +244,15 @@ public:
             //   若上界 ≤ 当前已找到的最优 RC，则该价不可能更优，
             //   直接跳过昂贵的凸包枚举。上界忽略非线性库存成本
             //   （恒正、被减去）故偏高，仍 ≥ 真实 RC，剪枝不漏最优解。
-            // 定价算法三值选择：0=Simplified / 1=Algorithm3 / 2=ConvexHull
+            // 定价算法三值选择：
+            // 0=Simplified候选+Algorithm3校验 / 1=Algorithm3 /
+            // 2=ConvexHull与Simplified候选+Algorithm3校验。
             int algoMode = config ? config->pricing_algorithm : 0;
-            // 上界剪枝仅在非论文精确版启用（Algorithm3 需完整枚举以保精确对比）
+            // 候选生成模式可用无损价格上界剪枝；纯 Algorithm3 模式完整扫描，
+            // 便于作为正式验证配置和穷举回归中的统一定价 oracle。
             bool enableUpperBound = (algoMode != 1);
+            // j 和 dual 在本轮价格扫描中固定，价格无关项只计算一次。
+            FeatureBase featBase = computeFeatureBase(j, dual);
             // 【优化4：上界降序早停】按 RC 上界降序遍历候选价格。
             //   上界剪枝的效果依赖尽早建立高 bestRC——先处理上界最高的价格，
             //   能更快抬高 result.reducedCost，从而剪掉更多低上界价格，
@@ -258,7 +263,6 @@ public:
                 // 【优化5】价格无关基底预算一次，供本轮所有候选价格复用，
                 //   省掉 computePriceUpperBound / solveForPrice_Simplified 内
                 //   对分段运输公式的重复计算。纯栈上局部，无并发风险。
-                FeatureBase featBase = computeFeatureBase(j, dual);
                 std::vector<std::pair<double, double>> priced;  // (上界, 价格)
                 priced.reserve(candidate_prices.size());
                 for (double price : candidate_prices) {
@@ -294,8 +298,22 @@ public:
                                  > verifiedCandidate.reducedCost)
                                 ? hullCandidate
                                 : verifiedCandidate;
+                        PricingResult exactCandidate =
+                            solveForPrice_Algorithm3(
+                                j, price, dual, branch, &featBase);
+                        if (exactCandidate.reducedCost
+                                > subResult.reducedCost) {
+                            subResult = exactCandidate;
+                        }
                     } else {
                         subResult = solveForPrice_Simplified(j, price, dual, branch, &featBase);
+                        PricingResult verifiedCandidate =
+                            solveForPrice_Algorithm3(
+                                j, price, dual, branch, &featBase);
+                        if (verifiedCandidate.reducedCost
+                            > subResult.reducedCost) {
+                            subResult = verifiedCandidate;
+                        }
                     }
                     collectFresh(subResult);
                     if (subResult.reducedCost > result.reducedCost) {
@@ -305,7 +323,8 @@ public:
             } else {
                 for (double price : candidate_prices) {
                     PricingResult subResult =
-                        solveForPrice_Algorithm3(j, price, dual, branch);
+                        solveForPrice_Algorithm3(
+                            j, price, dual, branch, &featBase);
                     collectFresh(subResult);
                     if (subResult.reducedCost > result.reducedCost) {
                         result = subResult;
@@ -999,21 +1018,39 @@ private:
      *   Step 4: 生成 12 个候选集，计算完整检验数，取最优
      */
     PricingResult solveForPrice_Algorithm3(int j, double p_j,
-                                            const std::vector<double>& dual,
-                                            const BranchState* branch = nullptr) {
-        // Algorithm 3's geometric construction assumes every item is free.
-        // A right branch can force an item with A_i>=0, which never enters the
-        // geometric point set.  Delegate branched prices to the formulation
-        // that embeds required/forbidden retailers in all aggregate terms.
-        if (branch && !branch->retailerBranches.empty()) {
-            return solveForPrice_Simplified(j, p_j, dual, branch);
-        }
+                                             const std::vector<double>& dual,
+                                             const BranchState* branch = nullptr,
+                                             const FeatureBase* base = nullptr) {
         PricingResult result(inst->numRetailer);
         result.dcIndex = j;
         result.optimal_pj = p_j;
 
         double w_j = (j < (int)inst->w.size()) ? inst->w[j] : 0.0;
-        auto features = computeFeatures(j, p_j, dual);
+        auto features = base ? computeFeatures(j, p_j, dual, *base)
+                             : computeFeatures(j, p_j, dual);
+
+        // Embed branch fixings into Algorithm 3.  Required retailers form the
+        // nonlinear-cost base point; forbidden retailers are excluded from
+        // the geometric optional-item set.
+        std::vector<int> fixedValue(inst->numRetailer, -1);
+        if (branch) {
+            for (const auto& rb : branch->retailerBranches) {
+                if (rb.dcIndex == j && rb.retailerIndex >= 0
+                    && rb.retailerIndex < inst->numRetailer) {
+                    fixedValue[rb.retailerIndex] = rb.value;
+                }
+            }
+        }
+        std::vector<int> forcedS(inst->numRetailer, 0);
+        double forcedMu = 0.0;
+        double forcedVar = 0.0;
+        for (int i = 0; i < inst->numRetailer; ++i) {
+            if (fixedValue[i] == 1) {
+                forcedS[i] = 1;
+                forcedMu += inst->mu[i];
+                forcedVar += inst->variance[i];
+            }
+        }
 
         // ===== Step 1: 收集 Ā_i < 0 的零售商，计算累积坐标 =====
         struct AlgoPoint {
@@ -1021,6 +1058,9 @@ private:
             double e;         // Ā_i(p_j)
             double x;         // -K̄_j(累积σ²) / e
             double y;         // -Ḡ_j(累积μ) / e
+            double norm;      // sqrt(x^2+y^2)，供所有点对复用
+            double simpleX;   // -mu/Ai，供兼容候选复用
+            double simpleY;   // -variance/Ai
             double cumMu;     // 累积需求（到该点为止的所有负Ai零售商的μ之和）
             double cumVar;    // 累积方差（到该点为止的所有负Ai零售商的σ²之和）
         };
@@ -1029,7 +1069,8 @@ private:
         double cumMu = 0.0, cumVar = 0.0;
 
         for (int i = 0; i < inst->numRetailer; i++) {
-            if (features[i].Ai < 0) {
+            if (fixedValue[i] != 0 && fixedValue[i] != 1
+                && features[i].Ai < 0) {
                 cumMu += features[i].mu;
                 cumVar += features[i].variance;
                 AlgoPoint pt;
@@ -1038,60 +1079,103 @@ private:
                 pt.cumMu = cumMu;
                 pt.cumVar = cumVar;
                 // x = -K̄_j(cumVar) / e, y = -Ḡ_j(cumMu) / e
-                double K = computeKbar(j, cumVar, w_j);
-                double G = computeGbar(j, cumMu, w_j);
+                double K = computeKbar(j, forcedVar + cumVar, w_j)
+                         - computeKbar(j, forcedVar, w_j);
+                double G = computeGbar(j, forcedMu + cumMu, w_j)
+                         - computeGbar(j, forcedMu, w_j);
                 pt.x = -K / pt.e;
                 pt.y = -G / pt.e;
+                pt.norm = std::sqrt(pt.x * pt.x + pt.y * pt.y);
+                pt.simpleX = -features[i].mu / pt.e;
+                pt.simpleY = -features[i].variance / pt.e;
                 points.push_back(pt);
             }
         }
 
         int num = points.size();
         if (num == 0) {
-            // 无负Ai零售商：除了空集，也尝试每个零售商单独服务和完整集
-            std::vector<int> bestS_candidate = std::vector<int>(inst->numRetailer, 0);
-            double bestRC_candidate = computeReducedCost(bestS_candidate, j, p_j, w_j, dual);
-
-            // 单元素集
-            for (int i = 0; i < inst->numRetailer; i++) {
-                std::vector<int> singleS(inst->numRetailer, 0);
-                singleS[i] = 1;
-                double rc = computeReducedCost(singleS, j, p_j, w_j, dual);
-                if (rc > bestRC_candidate) {
-                    bestRC_candidate = rc;
-                    bestS_candidate = singleS;
-                }
-            }
-
-            // 完整集（所有零售商）
-            std::vector<int> allS(inst->numRetailer, 1);
-            double rcAll = computeReducedCost(allS, j, p_j, w_j, dual);
-            if (rcAll > bestRC_candidate) {
-                bestRC_candidate = rcAll;
-                bestS_candidate = allS;
-            }
-
-            result.reducedCost = bestRC_candidate;
-            result.optimal_S = bestS_candidate;
+            result.reducedCost =
+                RevenueFormula::serviceSetAcceptsPrice(*inst, forcedS, p_j)
+                    ? computeReducedCost(forcedS, j, p_j, w_j, dual)
+                    : -DBL_MAX;
+            result.optimal_S = forcedS;
             return result;
         }
 
         // 最佳候选集
-        std::vector<int> bestS(inst->numRetailer, 0);
+        std::vector<int> bestS = forcedS;
         double bestRC = computeReducedCost(bestS, j, p_j, w_j, dual);
 
-        // ===== 枚举所有候选集并评估 =====
-        // 收集所有候选集索引（points 索引，非原始零售商索引）
-        std::vector<std::vector<int>> candidateSets = { {} };
+        // 候选生成后立即去重和评价，避免保存/复制 O(n^2) 个变长 vector。
+        constexpr int kBits = 64;
+        int nWords = (num + kBits - 1) / kBits;
+        if (nWords < 1) nWords = 1;
+        std::unordered_set<std::vector<uint64_t>, MaskHash> seen;
+        const std::size_t pairCount =
+            static_cast<std::size_t>(num) * static_cast<std::size_t>(num - 1) / 2;
+        seen.reserve(2 + num + 14 * pairCount);
+
+        double forcedAi = 0.0;
+        for (int i = 0; i < inst->numRetailer; ++i) {
+            if (fixedValue[i] == 1) forcedAi += features[i].Ai;
+        }
+        const double constRC =
+            -FacilityCostFormula::totalFixedCost(*inst, j, w_j)
+            - dual[inst->numRetailer + j];
+
+        auto evaluateMask = [&](const std::vector<uint64_t>& mask) {
+            double sumAi = forcedAi;
+            double sumMu = forcedMu;
+            double sumVar = forcedVar;
+            for (int ptIdx = 0; ptIdx < num; ++ptIdx) {
+                if ((mask[ptIdx / kBits]
+                     & (1ULL << (ptIdx % kBits))) == 0) {
+                    continue;
+                }
+                sumAi += points[ptIdx].e;
+                sumMu += features[points[ptIdx].origIdx].mu;
+                sumVar += features[points[ptIdx].origIdx].variance;
+            }
+            if (!seen.insert(mask).second) return;
+
+            double rc = constRC - sumAi
+                      - computeGbar(j, sumMu, w_j)
+                      - computeKbar(j, sumVar, w_j);
+            if (rc <= bestRC) return;
+
+            std::vector<int> S = forcedS;
+            for (int ptIdx = 0; ptIdx < num; ++ptIdx) {
+                if (mask[ptIdx / kBits]
+                    & (1ULL << (ptIdx % kBits))) {
+                    S[points[ptIdx].origIdx] = 1;
+                }
+            }
+            if (branch && !branch->isColumnFeasible(j, S)) return;
+            if (!RevenueFormula::serviceSetAcceptsPrice(*inst, S, p_j)) return;
+            bestRC = rc;
+            bestS = std::move(S);
+        };
+
+        auto evaluateCandidate = [&](const std::vector<int>& selIndices) {
+            std::vector<uint64_t> mask(nWords, 0ULL);
+            for (int ptIdx : selIndices) {
+                mask[ptIdx / kBits] |= (1ULL << (ptIdx % kBits));
+            }
+            evaluateMask(mask);
+        };
+
+        // ===== 枚举所有候选集并即时评估 =====
+        evaluateCandidate({});
 
         // 放入所有单元素集和完整集
         for (int t = 0; t < num; t++) {
-            candidateSets.push_back({t});
+            evaluateCandidate({t});
         }
         {
             std::vector<int> all;
+            all.reserve(num);
             for (int t = 0; t < num; t++) all.push_back(t);
-            candidateSets.push_back(all);
+            evaluateCandidate(all);
         }
 
         // ===== Step 2-3: 枚举所有点对 =====
@@ -1105,9 +1189,14 @@ private:
 
                 // 计算余弦相似度 cos(p,q)
                 double dot = xp * xq + yp * yq;
-                double normP = std::sqrt(xp * xp + yp * yp);
-                double normQ = std::sqrt(xq * xq + yq * yq);
+                double normP = points[p].norm;
+                double normQ = points[q].norm;
                 double cosPQ = (normP > 1e-15 && normQ > 1e-15) ? dot / (normP * normQ) : 0.0;
+                (void)cosPQ;
+                const double lineDx = xq - xp;
+                const double lineDy = yq - yp;
+                const double lineNorm =
+                    std::sqrt(lineDx * lineDx + lineDy * lineDy);
 
                 // 定义分区函数 F(x,y)
                 auto F = [&](double x, double y) -> double {
@@ -1121,8 +1210,13 @@ private:
                 };
 
                 // ===== Step 3: 分类点 =====
-                std::vector<int> Rp, Rq;   // 两侧的点（原始零售商索引）
-                std::vector<int> I1, I2, I3; // 共线点分类
+                std::vector<uint64_t> maskRp(nWords, 0ULL);
+                std::vector<uint64_t> maskRq(nWords, 0ULL);
+                std::vector<uint64_t> maskI1(nWords, 0ULL);
+                std::vector<uint64_t> maskI2(nWords, 0ULL);
+                auto setMaskBit = [&](std::vector<uint64_t>& mask, int idx) {
+                    mask[idx / kBits] |= (1ULL << (idx % kBits));
+                };
 
                 for (int t = 0; t < num; t++) {
                     if (t == p || t == q) continue;
@@ -1130,9 +1224,9 @@ private:
                     double val = F(points[t].x, points[t].y);
 
                     if (val > 1e-12) {
-                        Rp.push_back(t);
+                        setMaskBit(maskRp, t);
                     } else if (val < -1e-12) {
-                        Rq.push_back(t);
+                        setMaskBit(maskRq, t);
                     } else {
                         // 共线点：用余弦相似度进一步分类
                         // cos(pt) 和 cos(qt)
@@ -1142,50 +1236,55 @@ private:
                         double normQt = std::sqrt(xqt*xqt + yqt*yqt);
 
                         if (normPt > 1e-15) {
-                            double cosPQ_PT = (xpt*(xq-xp) + ypt*(yq-yp)) / (normPt * std::sqrt((xq-xp)*(xq-xp)+(yq-yp)*(yq-yp)));
+                            double cosPQ_PT =
+                                (xpt * lineDx + ypt * lineDy)
+                                / (normPt * lineNorm);
                             if (cosPQ_PT < -0.999999) {
-                                I1.push_back(t);  // 相反方向共线
+                                setMaskBit(maskI1, t);
                                 continue;
                             }
                         }
                         if (normQt > 1e-15) {
-                            double cosQP_QT = (xqt*(xp-xq) + yqt*(yp-yq)) / (normQt * std::sqrt((xp-xq)*(xp-xq)+(yp-yq)*(yp-yq)));
+                            double cosQP_QT =
+                                (-xqt * lineDx - yqt * lineDy)
+                                / (normQt * lineNorm);
                             if (cosQP_QT > 0.999999) {
-                                I2.push_back(t);  // 相同方向共线
+                                setMaskBit(maskI2, t);
                                 continue;
                             }
                         }
-                        I3.push_back(t);  // 其他边界情况
                     }
                 }
 
                 // ===== Step 4: 枚举 12 个候选集 =====
-                // 从 Rp 侧出发的 5 个候选
-                std::vector<std::vector<int>> candidatesFromRp = {
-                    Rp,                                    // 1. Rp
-                    concat(Rp, I1),                        // 2. Rp ∪ I1
-                    concat(Rp, I1, {p}),                   // 3. Rp ∪ I1 ∪ {p}
-                    concat(Rp, I1, {p}, I2),               // 4. Rp ∪ I1 ∪ {p} ∪ I2
-                    concat(Rp, I1, {p}, I2, {q}),          // 5. Rp ∪ I1 ∪ {p} ∪ I2 ∪ {q}
+                auto mergedMask = [&](const std::vector<uint64_t>& side,
+                                      bool addI1, bool addP,
+                                      bool addI2, bool addQ) {
+                    std::vector<uint64_t> mask = side;
+                    for (int word = 0; word < nWords; ++word) {
+                        if (addI1) mask[word] |= maskI1[word];
+                        if (addI2) mask[word] |= maskI2[word];
+                    }
+                    if (addP) setMaskBit(mask, p);
+                    if (addQ) setMaskBit(mask, q);
+                    evaluateMask(mask);
                 };
-                // 从 Rq 侧出发的 5 个候选
-                std::vector<std::vector<int>> candidatesFromRq = {
-                    Rq,                                    // 6. Rq
-                    concat(Rq, I1),                        // 7. Rq ∪ I1
-                    concat(Rq, I1, {p}),                   // 8. Rq ∪ I1 ∪ {p}
-                    concat(Rq, I1, {p}, I2),               // 9. Rq ∪ I1 ∪ {p} ∪ I2
-                    concat(Rq, I1, {p}, I2, {q}),          // 10. Rq ∪ I1 ∪ {p} ∪ I2 ∪ {q}
-                };
-                // 额外：仅 {p} 和 {q}（从论文算法中推断，完整覆盖）
-                std::vector<std::vector<int>> extraCandidates = {
-                    {p},                                    // 11. {p}
-                    {q},                                    // 12. {q}
-                };
-
-                // 把 Algorithm 3 的 12 个候选集加入总候选列表
-                for (const auto& c : candidatesFromRp) candidateSets.push_back(c);
-                for (const auto& c : candidatesFromRq) candidateSets.push_back(c);
-                for (const auto& c : extraCandidates) candidateSets.push_back(c);
+                mergedMask(maskRp, false, false, false, false);
+                mergedMask(maskRp, true,  false, false, false);
+                mergedMask(maskRp, true,  true,  false, false);
+                mergedMask(maskRp, true,  true,  true,  false);
+                mergedMask(maskRp, true,  true,  true,  true);
+                mergedMask(maskRq, false, false, false, false);
+                mergedMask(maskRq, true,  false, false, false);
+                mergedMask(maskRq, true,  true,  false, false);
+                mergedMask(maskRq, true,  true,  true,  false);
+                mergedMask(maskRq, true,  true,  true,  true);
+                std::vector<uint64_t> singleton(nWords, 0ULL);
+                setMaskBit(singleton, p);
+                evaluateMask(singleton);
+                std::fill(singleton.begin(), singleton.end(), 0ULL);
+                setMaskBit(singleton, q);
+                evaluateMask(singleton);
             }
         }
 
@@ -1194,52 +1293,25 @@ private:
         {
             for (int m = 0; m < num - 1; m++) {
                 for (int n = m + 1; n < num; n++) {
-                    double xi_m = -features[points[m].origIdx].mu / points[m].e;
-                    double yi_m = -features[points[m].origIdx].variance / points[m].e;
-                    double xi_n = -features[points[n].origIdx].mu / points[n].e;
-                    double yi_n = -features[points[n].origIdx].variance / points[n].e;
+                    double xi_m = points[m].simpleX;
+                    double yi_m = points[m].simpleY;
+                    double xi_n = points[n].simpleX;
+                    double yi_n = points[n].simpleY;
                     double dx = xi_n - xi_m;
                     if (std::abs(dx) < 1e-15) continue;
                     double k = (yi_n - yi_m) / dx;
                     double b = yi_n - k * xi_n;
                     std::vector<int> below, above;
                     for (int t = 0; t < num; t++) {
-                        double xi_t = -features[points[t].origIdx].mu / points[t].e;
-                        double yi_t = -features[points[t].origIdx].variance / points[t].e;
+                        double xi_t = points[t].simpleX;
+                        double yi_t = points[t].simpleY;
                         double val = k * xi_t + b;
                         if (yi_t <= val + 1e-12) below.push_back(t);
                         if (yi_t >= val - 1e-12) above.push_back(t);
                     }
-                    candidateSets.push_back(below);
-                    candidateSets.push_back(above);
+                    evaluateCandidate(below);
+                    evaluateCandidate(above);
                 }
-            }
-        }
-
-        // 去重并对所有候选集计算检验数，取最优
-        auto setToKey = [](const std::vector<int>& indices) -> std::string {
-            std::string key;
-            for (int idx : indices) key += std::to_string(idx) + ",";
-            return key;
-        };
-        std::unordered_set<std::string> seen;
-        for (const auto& selIndices : candidateSets) {
-            std::string key = setToKey(selIndices);
-            if (!seen.insert(key).second) continue;
-
-            // 把 points 索引映射回原始零售商索引，构建 S 向量
-            std::vector<int> S(inst->numRetailer, 0);
-            for (int ptIdx : selIndices) {
-                S[points[ptIdx].origIdx] = 1;
-            }
-            // 分支约束过滤：跳过违反 (j,i,value) 约束的服务集合
-            if (branch && !branch->isColumnFeasible(j, S)) continue;
-            if (!RevenueFormula::serviceSetAcceptsPrice(
-                    *inst, S, p_j)) continue;
-            double rc = computeReducedCost(S, j, p_j, w_j, dual);
-            if (rc > bestRC) {
-                bestRC = rc;
-                bestS = S;
             }
         }
 
@@ -1252,29 +1324,26 @@ private:
      * 辅助函数：连接多个 vector<int>（用于 Step 4 的候选集构建）
      */
     static std::vector<int> concat(const std::vector<int>& a, const std::vector<int>& b) {
-        std::vector<int> r = a;
+        std::vector<int> r;
+        r.reserve(a.size() + b.size());
+        r.insert(r.end(), a.begin(), a.end());
         r.insert(r.end(), b.begin(), b.end());
-        // 去重（同一元素可能出现在 I1 和 Rp 中）
-        std::sort(r.begin(), r.end());
-        r.erase(std::unique(r.begin(), r.end()), r.end());
         return r;
     }
 
     static std::vector<int> concat(const std::vector<int>& a, const std::vector<int>& b,
                                     const std::vector<int>& c) {
         std::vector<int> r = concat(a, b);
+        r.reserve(r.size() + c.size());
         r.insert(r.end(), c.begin(), c.end());
-        std::sort(r.begin(), r.end());
-        r.erase(std::unique(r.begin(), r.end()), r.end());
         return r;
     }
 
     static std::vector<int> concat(const std::vector<int>& a, const std::vector<int>& b,
                                     const std::vector<int>& c, const std::vector<int>& d) {
         std::vector<int> r = concat(a, b, c);
+        r.reserve(r.size() + d.size());
         r.insert(r.end(), d.begin(), d.end());
-        std::sort(r.begin(), r.end());
-        r.erase(std::unique(r.begin(), r.end()), r.end());
         return r;
     }
 
@@ -1282,9 +1351,8 @@ private:
                                     const std::vector<int>& c, const std::vector<int>& d,
                                     const std::vector<int>& e) {
         std::vector<int> r = concat(a, b, c, d);
+        r.reserve(r.size() + e.size());
         r.insert(r.end(), e.begin(), e.end());
-        std::sort(r.begin(), r.end());
-        r.erase(std::unique(r.begin(), r.end()), r.end());
         return r;
     }
 };

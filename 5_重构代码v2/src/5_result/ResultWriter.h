@@ -145,12 +145,16 @@ public:
             (config.pricing_algorithm == 1)
                 ? "论文 Algorithm3 (完整凸包+余弦相似度)"
                 : (config.pricing_algorithm == 2)
-                      ? "ConvexHull 候选 + Simplified 完整校验"
-                      : "Simplified 简化枚举 (全点对 above/below)";
+                      ? "ConvexHull/Simplified 候选 + Algorithm3 完整校验"
+                      : "Simplified 候选 + Algorithm3 完整校验";
         file << "    定价算法: " << algo_name << "\n\n";
 
         file << "求解认证:\n";
         file << "  状态: " << solveStatusName(result_.solveStatus) << "\n";
+        file << "  结果分类: "
+             << solveOutcomeName(result_.solveStatus,
+                                 result_.hasIntegerSolution)
+             << "\n";
         file << "  存在整数可行解: "
              << (result_.hasIntegerSolution ? "是" : "否") << "\n";
         if (result_.hasIntegerSolution) {
@@ -279,7 +283,7 @@ public:
         // 第一行：核心指标
         file << std::left
              << std::setw(16) << "名称"
-             << std::setw(22) << "状态"
+             << std::setw(30) << "结果分类"
              << std::setw(6) << "#DC"
              << std::setw(6) << "#Rts"
              << std::setw(16) << "总利润"
@@ -296,12 +300,13 @@ public:
              << std::setw(10) << "CG时间"
              << std::setw(10) << "PS时间"
              << std::setw(10) << "BB时间" << std::endl;
-        file << std::string(196, '-') << std::endl;
+        file << std::string(204, '-') << std::endl;
 
         for (const auto& r : results) {
             file << std::left << std::fixed << std::setprecision(2);
             file << std::setw(16) << r.experimentName
-                 << std::setw(22) << solveStatusName(r.solveStatus)
+                 << std::setw(30)
+                 << solveOutcomeName(r.solveStatus, r.hasIntegerSolution)
                  << std::setw(6) << r.numDC
                  << std::setw(6) << r.numRetailers
                  << std::setw(16) << r.totalProfit

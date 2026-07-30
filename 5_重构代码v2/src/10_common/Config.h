@@ -155,8 +155,10 @@ public:
                                          // false=简化凸包枚举（当前算法，更快）
                                          // 注：保留此字段仅为向后兼容，实际调度以 pricing_algorithm 为准
 
-    // 三方案对比开关：0=Simplified / 1=Algorithm3 /
-    // 2=ConvexHull候选+Simplified校验（纯ConvexHull曾在随机穷举中漏列）
+    // 正式定价模式：
+    // 0=Simplified候选+Algorithm3完整校验 / 1=Algorithm3 /
+    // 2=ConvexHull/Simplified候选+Algorithm3完整校验。
+    // Simplified与纯ConvexHull均在随机穷举中出现过漏列，不能单独认证最优。
     int pricing_algorithm = 0;
 
     // 每个 DC 每轮定价返回的最多列数（multi-column pricing）。

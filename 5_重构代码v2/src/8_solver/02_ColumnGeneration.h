@@ -179,7 +179,13 @@ public:
                       << " | RC 阈值=" << cfg.rc_eps << std::endl;
             std::cout << "        优化: 每DC持久 PricingSolver(缓存跨迭代保留) + 持久线程池(不再每轮建销)" << std::endl;
             std::cout << "\n      ========== [环节5/5] 定价子问题 PS（每DC生成最大负 RC 列，本次瓶颈~83%） ==========" << std::endl;
-            std::cout << "        算法: " << (cfg.use_paper_algorithm3 ? "论文Algorithm3(完整凸包+余弦相似度)" : "简化凸包枚举(两点组合)") << std::endl;
+            const char* pricingLabel =
+                (cfg.pricing_algorithm == 1)
+                    ? "论文Algorithm3（正式校验模式）"
+                    : ((cfg.pricing_algorithm == 2)
+                           ? "ConvexHull/Simplified候选 + Algorithm3完整校验"
+                           : "Simplified候选 + Algorithm3完整校验");
+            std::cout << "        算法: " << pricingLabel << std::endl;
             std::cout << "        无损缓存: cachedBestCols仅提供 incumbent/上界剪枝，不跳过完整定价" << std::endl;
             std::cout << "        完整定价: 候选价格(保留价去重)×两点组合 O(候选价×n_neg²×numRetailer)" << std::endl;
             cgBannerPrinted = true;

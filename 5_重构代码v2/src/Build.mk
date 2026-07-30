@@ -32,6 +32,7 @@ EXPERIMENT_OBJ = $(EXPERIMENT_SRC:.cpp=.o)
 TARGET = ../bin/ga_bp
 EXPERIMENT_TARGET = ../bin/batch
 INVESTMENT_TEST_SRC = 99_test/test_investment_objective.cpp
+INVESTMENT_TEST_OBJ = $(INVESTMENT_TEST_SRC:.cpp=.o)
 INVESTMENT_TEST_TARGET = ../bin/test_investment_objective
 
 # 默认运行配置（make run 使用），可用命令行覆盖：make run CONFIG=xxx.yaml
@@ -50,9 +51,9 @@ all-bins: $(TARGET) $(EXPERIMENT_TARGET)
 test-investment: $(INVESTMENT_TEST_TARGET)
 	$(INVESTMENT_TEST_TARGET)
 
-$(INVESTMENT_TEST_TARGET): $(INVESTMENT_TEST_SRC)
+$(INVESTMENT_TEST_TARGET): $(INVESTMENT_TEST_OBJ)
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -o $@ $<
+	$(CXX) $(CXXFLAGS) -o $@ $^
 
 # 编译并运行（默认配置 delta3000.yaml；产物在 v2/bin，日志固定在 v2/results/single）
 run: $(TARGET)
@@ -70,10 +71,11 @@ $(EXPERIMENT_TARGET): $(EXPERIMENT_OBJ)
 # 通用编译规则（自动跟踪头文件依赖）
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
--include $(MAIN_OBJ:.o=.d) $(EXPERIMENT_OBJ:.o=.d)
+-include $(MAIN_OBJ:.o=.d) $(EXPERIMENT_OBJ:.o=.d) $(INVESTMENT_TEST_OBJ:.o=.d)
 
 # 清理
 clean:
 	rm -f $(MAIN_OBJ) $(EXPERIMENT_OBJ)
+	rm -f $(INVESTMENT_TEST_OBJ)
 	rm -f $(TARGET) $(EXPERIMENT_TARGET)
 	rm -f $(INVESTMENT_TEST_TARGET)

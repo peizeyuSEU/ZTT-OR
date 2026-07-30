@@ -192,6 +192,18 @@ std::vector<PricingResult> bruteBestColumnPerPrice(
 
 int main() {
     try {
+        if (std::string(solveOutcomeName(SolveStatus::OPTIMAL, true))
+                != "OPTIMAL_CERTIFIED"
+            || std::string(solveOutcomeName(SolveStatus::TIME_LIMIT, true))
+                != "TIME_LIMIT_WITH_INCUMBENT"
+            || std::string(solveOutcomeName(SolveStatus::TIME_LIMIT, false))
+                != "TIME_LIMIT_NO_INCUMBENT"
+            || std::string(solveOutcomeName(
+                   SolveStatus::CG_ITERATION_LIMIT, false))
+                != "INCOMPLETE_CG_NO_INCUMBENT") {
+            throw std::runtime_error("solve outcome classification failed");
+        }
+
         const Instance inst = makeInstance();
         const double price = 60.0;
         const double w = inst.w[0];
@@ -299,9 +311,10 @@ int main() {
         const double gammaValues[] = {0.25, 0.5, 0.75, 1.0};
         int randomizedCases = 0;
         for (int n = 4; n <= 12; ++n) {
-            for (int trial = 0; trial < 4; ++trial) {
+            for (int trial = 0; trial < 25; ++trial) {
                 Instance randomInst = makeRandomInstance(n, rng);
-                randomInst.w[0] = 0.1 + 0.2 * trial;
+                randomInst.w[0] =
+                    0.05 + 0.90 * static_cast<double>(trial % 10) / 9.0;
                 Config randomConfig = paper;
                 randomConfig.investment_exponent =
                     gammaValues[(n + trial) % 4];
@@ -310,13 +323,14 @@ int main() {
                 for (double& value : randomDual) value = dualDist(rng);
 
                 BranchState randomBranch;
-                if (trial == 1) {
+                const int branchMode = trial % 4;
+                if (branchMode == 1) {
                     randomBranch =
                         randomBranch.branchOnRetailer(0, 0, 0);
-                } else if (trial == 2) {
+                } else if (branchMode == 2) {
                     randomBranch =
                         randomBranch.branchOnRetailer(0, 0, 1);
-                } else if (trial == 3) {
+                } else if (branchMode == 3) {
                     randomBranch =
                         randomBranch.branchOnRetailer(0, 0, 1);
                     randomBranch =
@@ -325,7 +339,7 @@ int main() {
                         randomBranch.branchOnRetailer(0, 2, 1);
                 }
                 const BranchState* branch =
-                    trial == 0 ? nullptr : &randomBranch;
+                    branchMode == 0 ? nullptr : &randomBranch;
                 PricingResult exhaustive = bruteForcePricing(
                     randomInst, randomConfig, 0, randomDual, branch);
                 for (int algorithm = 0; algorithm <= 2; ++algorithm) {
@@ -357,6 +371,13 @@ int main() {
                                 << ", actual=" << actual.reducedCost
                                 << ", exhaustive="
                                 << exhaustive.reducedCost
+                                << ", exhaustiveP="
+                                << exhaustive.optimal_pj
+                                << ", exhaustiveS=";
+                        for (int served : exhaustive.optimal_S) {
+                            message << served;
+                        }
+                        message
                                 << ", recomputed=" << recomputed
                                 << ", p=" << actual.optimal_pj
                                 << ", S=";
@@ -441,6 +462,8 @@ int main() {
 
         std::cout << "PASS: investment cost is included exactly once in every "
                      "paper-model column coefficient.\n";
+        std::cout << "PASS: solve statuses map to explicit certified/limited "
+                     "outcome categories.\n";
         std::cout << "PASS: exhaustive service-set check (8/8).\n";
         std::cout << "PASS: post-deduction legacy ranking can select a different "
                      "service set.\n";

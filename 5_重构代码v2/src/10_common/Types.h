@@ -35,6 +35,32 @@ inline const char* solveStatusName(SolveStatus status) {
     return "ERROR";
 }
 
+inline const char* solveOutcomeName(SolveStatus status,
+                                    bool hasIntegerSolution) {
+    switch (status) {
+        case SolveStatus::OPTIMAL: return "OPTIMAL_CERTIFIED";
+        case SolveStatus::TIME_LIMIT:
+            return hasIntegerSolution ? "TIME_LIMIT_WITH_INCUMBENT"
+                                      : "TIME_LIMIT_NO_INCUMBENT";
+        case SolveStatus::NODE_LIMIT:
+            return hasIntegerSolution ? "NODE_LIMIT_WITH_INCUMBENT"
+                                      : "NODE_LIMIT_NO_INCUMBENT";
+        case SolveStatus::GAP_LIMIT:
+            return hasIntegerSolution ? "GAP_LIMIT_WITH_INCUMBENT"
+                                      : "GAP_LIMIT_NO_INCUMBENT";
+        case SolveStatus::CG_ITERATION_LIMIT:
+            return hasIntegerSolution ? "INCOMPLETE_CG_WITH_INCUMBENT"
+                                      : "INCOMPLETE_CG_NO_INCUMBENT";
+        case SolveStatus::FEASIBLE_NOT_PROVEN:
+            return "FEASIBLE_NOT_PROVEN";
+        case SolveStatus::INFEASIBLE: return "INFEASIBLE_CERTIFIED";
+        case SolveStatus::NO_INTEGER_SOLUTION: return "NO_INTEGER_SOLUTION";
+        case SolveStatus::NOT_STARTED: return "NOT_STARTED";
+        case SolveStatus::ERROR: return "ERROR";
+    }
+    return "ERROR";
+}
+
 struct PricingResult {
     double reducedCost = -DBL_MAX;
     std::vector<int> optimal_S;

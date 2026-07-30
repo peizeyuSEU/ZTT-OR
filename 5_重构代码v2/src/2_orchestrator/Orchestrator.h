@@ -281,6 +281,10 @@ private:
         // 控制台输出摘要
         std::cout << "\n========== 最终结果 ==========" << std::endl;
         std::cout << "求解状态: " << solveStatusName(sol.solveStatus) << std::endl;
+        std::cout << "结果分类: "
+                  << solveOutcomeName(sol.solveStatus,
+                                      sol.hasIntegerSolution)
+                  << std::endl;
         if (sol.bestBound < DBL_MAX / 2) {
             std::cout << "有效上界: " << sol.bestBound
                       << " | 相对Gap: " << sol.relativeGap << std::endl;
