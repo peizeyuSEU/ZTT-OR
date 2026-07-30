@@ -1,0 +1,33 @@
+plan_name: "diag_alg3_dedup_30x100"
+plan_desc: "Algorithm3候选去重前移性能对照，只运行已完成基线的w=0/0.2/0.5"
+
+num_dc: 30
+num_retailers: 100
+random_seed: 32501
+run_mode: fixed_w
+use_sqrt_investment: true
+investment_exponent: 0.5
+use_invest_in_column: true
+population_size: 1
+max_generation: 1
+mutation_rate: -1
+chromosome_length: 10
+
+pricing_algorithm: 0
+pricing_max_cols_per_dc: 1
+max_cg_iterations: 1000
+cg_early_stop: false
+max_branch_nodes: 10000
+bp_time_limit_sec: 600
+bp_relative_gap: 0
+parallel_fitness: false
+parallel_pricing: false
+cplex_threads: 1
+
+experiments:
+  - name: "dedup_30x100_w00"
+    fixed_w: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  - name: "dedup_30x100_w02"
+    fixed_w: [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2]
+  - name: "dedup_30x100_w05"
+    fixed_w: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]

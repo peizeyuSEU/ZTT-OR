@@ -1124,6 +1124,11 @@ private:
             - dual[inst->numRetailer + j];
 
         auto evaluateMask = [&](const std::vector<uint64_t>& mask) {
+            // Algorithm 3 的不同点对经常生成同一个服务集合。先去重再做
+            // O(num) 聚合，避免为已评估候选重复扫描全部可选零售商。
+            // 仅改变计算顺序，不改变候选集合、检验数或最优列。
+            if (!seen.insert(mask).second) return;
+
             double sumAi = forcedAi;
             double sumMu = forcedMu;
             double sumVar = forcedVar;
@@ -1136,7 +1141,6 @@ private:
                 sumMu += features[points[ptIdx].origIdx].mu;
                 sumVar += features[points[ptIdx].origIdx].variance;
             }
-            if (!seen.insert(mask).second) return;
 
             double rc = constRC - sumAi
                       - computeGbar(j, sumMu, w_j)
