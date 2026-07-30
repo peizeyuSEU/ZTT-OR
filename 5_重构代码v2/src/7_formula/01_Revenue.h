@@ -21,6 +21,20 @@
 class RevenueFormula {
 public:
     /**
+     * 检查服务集合与统一批发价是否相容。
+     * 模型含义是 S_i=1 表示零售商实际接受服务，因此必须有 p_j<=v_i。
+     */
+    static bool serviceSetAcceptsPrice(const Instance& inst,
+                                       const std::vector<int>& S,
+                                       double p_j,
+                                       double eps = 1e-9) {
+        for (int i = 0; i < inst.numRetailer && i < (int)S.size(); i++) {
+            if (S[i] == 1 && p_j > inst.reservePrice[i] + eps) return false;
+        }
+        return true;
+    }
+
+    /**
      * 计算零售商i的单价收入
      * @param p_j    配送中心制定的批发价
      * @param v_i    零售商的保留价

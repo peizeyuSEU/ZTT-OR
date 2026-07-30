@@ -105,6 +105,7 @@ int main(int argc, char** argv) {
             f << "supplier_y: " << cfg.supplier_y << "\n";
             // 公式模型与定价算法（核心：确保用选定的方案0）
             f << "use_sqrt_investment: " << (cfg.use_sqrt_investment ? "true" : "false") << "\n";
+            f << "investment_exponent: " << cfg.investment_exponent << "\n";
             f << "use_invest_in_column: " << (cfg.use_invest_in_column ? "true" : "false") << "\n";
             f << "pricing_algorithm: " << cfg.pricing_algorithm << "\n";
             f << "pricing_max_cols_per_dc: " << cfg.pricing_max_cols_per_dc << "\n";

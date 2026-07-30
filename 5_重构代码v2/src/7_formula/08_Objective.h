@@ -30,7 +30,7 @@
  * - 旧逻辑（use_invest_in_column=false）：投资成本不在列利润中，事后统一扣除。
  *   仅对 quadraticOnlyModel(½βw², 不依赖S) 安全。
  * - 新逻辑（use_invest_in_column=true）：投资成本纳入列利润，定价RC同步含投资成本。
- *   对 sqrtDemandModel(½δw²√D, 依赖S) 是正确处理——√D依赖S，事后扣除无法正确还原D_j。
+ *   对 demandScaleModel(½δw²D^γ, 依赖S) 是正确处理——D^γ依赖S，事后扣除无法正确还原D_j。
  * - 此处同时提供包含和不包含投资成本的两个版本（受开关控制）。
  */
 
@@ -77,7 +77,8 @@ public:
             double D_j = InventoryCostFormula::totalDemand(inst, j, S);
             bool useSqrtModel = config->use_sqrt_investment;
             double investCost = InvestmentCostFormula::compute(
-                inst, j, w_j, D_j, useSqrtModel);
+                inst, j, w_j, D_j, useSqrtModel,
+                config->investment_exponent);
             profit -= investCost;
         }
 
@@ -89,7 +90,7 @@ public:
      *
      * 此版本用于BranchAndPrice最终汇总。
      *
-     * @param useSqrtModel  是否使用√D_j版本的减排投资成本模型
+     * @param useSqrtModel  是否使用需求规模相关的减排投资成本模型
      */
     double totalProfit(const Instance& inst, int j,
                         const std::vector<int>& S, double p_j,
@@ -105,7 +106,8 @@ public:
         // 历史模式的 columnProfit 不含投资成本，在完整利润接口中补扣一次。
         double D_j = InventoryCostFormula::totalDemand(inst, j, S);
         return profit - InvestmentCostFormula::compute(
-            inst, j, w_j, D_j, useSqrtModel);
+            inst, j, w_j, D_j, useSqrtModel,
+            config ? config->investment_exponent : 0.5);
     }
 
     /**

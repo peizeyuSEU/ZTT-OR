@@ -354,13 +354,21 @@ public:
                 if (j_S[j].empty()) {
                     std::vector<int> forcedS(numRetailer, 0);
                     double price = 0.0;
+                    bool hasForcedRetailer = false;
+                    double forcedPriceCap = IloInfinity;
                     for (const auto& rb : branchState.retailerBranches) {
                         if (rb.dcIndex == j && rb.value == 1
                             && rb.retailerIndex < numRetailer) {
                             forcedS[rb.retailerIndex] = 1;
-                            price = std::max(price, inst->reservePrice[rb.retailerIndex]);
+                            hasForcedRetailer = true;
+                            forcedPriceCap = std::min(
+                                forcedPriceCap,
+                                inst->reservePrice[rb.retailerIndex]);
                         }
                     }
+                    // 所有被强制服务的零售商都必须接受统一价格，故价格上限是
+                    // 它们保留价的最小值，而不是最大值。
+                    if (hasForcedRetailer) price = forcedPriceCap;
                     double w_j = (j < (int)inst->w.size()) ? inst->w[j] : 0.0;
                     double profit = objFormula.columnProfit(*inst, j, forcedS, price, w_j);
                     j_S[j].push_back(forcedS);
@@ -377,6 +385,9 @@ public:
                     for (int m = 0; m < (int)parentS.size(); m++) {
                         const std::vector<int>& S = parentS[m];
                         if (!branchState.isColumnFeasible(j, S)) continue;
+                        double pj = (m < (int)parentP.size()) ? parentP[m] : 0.0;
+                        if (!RevenueFormula::serviceSetAcceptsPrice(
+                                *inst, S, pj)) continue;
                         bool duplicated = false;
                         for (const auto& existingS : j_S[j]) {
                             if (existingS == S) {
@@ -385,7 +396,6 @@ public:
                             }
                         }
                         if (duplicated) continue;
-                        double pj = (m < (int)parentP.size()) ? parentP[m] : 0.0;
                         double w_j = (j < (int)inst->w.size()) ? inst->w[j] : 0.0;
                         double profit = objFormula.columnProfit(*inst, j, S, pj, w_j);
                         j_S[j].push_back(S);
@@ -673,7 +683,8 @@ public:
                 int rcPositiveCount = 0;
                 int maxColsPerDC = config ? config->pricing_max_cols_per_dc : 1;
                 // Hysteresis: once a node has exhibited genuine tailing-off,
-                // keep Top-K active for the remainder of this node's CG solve.
+                // keep multi-column pricing active for the remainder of this
+                // node's CG solve.
                 // A child node starts a fresh solve (and therefore starts at K=1).
                 // Immediate K=3 -> K=1 fallback caused repeated mode oscillation
                 // and failed to escape degeneracy on the w=0.5 large instance.

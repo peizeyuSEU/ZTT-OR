@@ -85,7 +85,9 @@ private:
     std::vector<std::vector<CachedColumn>> cachedBestCols;  // 每个DC一个多列列表
     int pricingIterCounter = 0;                             // 全局迭代计数器
     // solveMulti() 请求一次完整定价时，solve() 在同一轮价格扫描中顺带收集
-    // 当前对偶下的 Top-K 唯一正列。每个 PricingSolver 仅由其对应 DC 的线程访问。
+    // 每个候选价格的最优正列，再从中保留 K 个唯一服务集合。注意这不是所有
+    // (price, service set) 组合的严格全局 Top-K；其用途是无损地附加多列加速，
+    // 而 solve() 返回的全局最佳列仍负责精确定价与收敛认证。
     int requestedFreshCols_ = 1;
     std::vector<PricingResult> lastFreshCandidates_;
 
@@ -163,6 +165,10 @@ public:
                 if (branch != nullptr && !branch->isColumnFeasible(j, cached.S)) {
                     continue;  // 分支约束下不可行，跳过
                 }
+                if (!RevenueFormula::serviceSetAcceptsPrice(
+                        *inst, cached.S, cached.p_j)) {
+                    continue;
+                }
                 double profit = objFormula.columnProfit(*inst, j, cached.S, cached.p_j,
                     (j < (int)inst->w.size()) ? inst->w[j] : 0.0);
                 double rc = profit;
@@ -197,6 +203,34 @@ public:
             std::vector<double> candidate_prices;
             for (int i = 0; i < inst->numRetailer; i++) {
                 candidate_prices.push_back(inst->reservePrice[i]);
+            }
+            // 若右分支要求 DC j 服务若干零售商，统一价格必须不超过这些
+            // 零售商中的最低保留价，否则 S_i=1 与“接受服务”的模型含义冲突。
+            if (branch) {
+                double forcedPriceCap = DBL_MAX;
+                bool hasForcedRetailer = false;
+                for (const auto& rb : branch->retailerBranches) {
+                    if (rb.dcIndex == j && rb.value == 1
+                        && rb.retailerIndex >= 0
+                        && rb.retailerIndex < inst->numRetailer) {
+                        hasForcedRetailer = true;
+                        forcedPriceCap = std::min(
+                            forcedPriceCap,
+                            inst->reservePrice[rb.retailerIndex]);
+                    }
+                }
+                if (hasForcedRetailer) {
+                    candidate_prices.erase(
+                        std::remove_if(
+                            candidate_prices.begin(), candidate_prices.end(),
+                            [forcedPriceCap](double p) {
+                                return p > forcedPriceCap + 1e-9;
+                            }),
+                        candidate_prices.end());
+                    // forcedPriceCap 本身来自某个零售商保留价，正常情况下已在
+                    // candidate_prices 中；显式补入可防未来候选价生成规则变化。
+                    candidate_prices.push_back(forcedPriceCap);
+                }
             }
             // 去重
             std::sort(candidate_prices.begin(), candidate_prices.end());
@@ -237,15 +271,29 @@ public:
                               return a.first > b.first;  // 上界降序
                           });
                 for (const auto& pr : priced) {
-                    if (pr.first <= result.reducedCost) {
-                        // 单列模式仍按 incumbent 剪枝；多列模式仅当后续价格
-                        // 不可能进入当前 Top-K 正列时退出。
+                    const double stopThreshold =
+                        (requestedFreshCols_ <= 1)
+                            ? result.reducedCost
+                            : rc_eps;
+                    if (pr.first <= stopThreshold) {
+                        // 单列模式按当前全局最佳 RC 剪枝。多列模式不能用第一名
+                        // 的 RC 提前退出，否则会漏掉其他价格下的附加正列；这里只
+                        // 在后续价格的严格上界已不可能产生正列时才停止。
                         break;
                     }
                     double price = pr.second;
                     PricingResult subResult;
                     if (algoMode == 2) {
-                        subResult = solveForPrice_ConvexHull(j, price, dual, branch);
+                        PricingResult hullCandidate =
+                            solveForPrice_ConvexHull(j, price, dual, branch);
+                        PricingResult verifiedCandidate =
+                            solveForPrice_Simplified(
+                                j, price, dual, branch, &featBase);
+                        subResult =
+                            (hullCandidate.reducedCost
+                                 > verifiedCandidate.reducedCost)
+                                ? hullCandidate
+                                : verifiedCandidate;
                     } else {
                         subResult = solveForPrice_Simplified(j, price, dual, branch, &featBase);
                     }
@@ -311,7 +359,8 @@ public:
      * 求解DC j的定价子问题，返回多个正检验数列（multi-column pricing）。
      *
      * solve() 仍执行完整定价并返回全局最优列；与此同时，在同一次候选价格扫描中
-     * 收集当前对偶下的 Top-K 唯一正列。附加列不再依赖历史缓存。
+     * 收集“每个候选价格的最优列”中的 K 个唯一正列。附加列不再依赖历史
+     * 缓存。它是多列加速候选集，不宣称是全部可行列的严格全局 Top-K。
      *
      * @param j DC索引
      * @param dual 对偶变量数组
@@ -445,7 +494,8 @@ private:
         double invest_part = 0.0;
         if (config && config->use_invest_in_column) {
             invest_part = InvestmentCostFormula::compute(
-                *inst, j, w_j, totalDemand, config->use_sqrt_investment);
+                *inst, j, w_j, totalDemand, config->use_sqrt_investment,
+                config->investment_exponent);
         }
         return eoq_part + invest_part;
     }
@@ -747,7 +797,8 @@ private:
             double investCost = 0.0;
             if (config->use_invest_in_column && sumMu > 0.0) {
                 investCost = InvestmentCostFormula::compute(
-                    *inst, j, w_j, sumMu, config->use_sqrt_investment);
+                    *inst, j, w_j, sumMu, config->use_sqrt_investment,
+                    config->investment_exponent);
             }
 
             // RC = columnProfit - Σλ_i - λ_DC
@@ -768,6 +819,8 @@ private:
             }
             // 分支约束过滤：违反 (j,i,value) 约束则跳过
             if (branch && !branch->isColumnFeasible(j, Sfull)) continue;
+            if (!RevenueFormula::serviceSetAcceptsPrice(
+                    *inst, Sfull, p_j)) continue;
 
             result.reducedCost = rc;
             result.optimal_S = Sfull;
@@ -791,8 +844,15 @@ private:
      * 不保证与 Simplified 结果一致，仅用于三方案对比实验。
      */
     PricingResult solveForPrice_ConvexHull(int j, double p_j,
-                                           const std::vector<double>& dual,
-                                           const BranchState* branch = nullptr) {
+                                             const std::vector<double>& dual,
+                                             const BranchState* branch = nullptr) {
+        // This geometric candidate generator was derived for the unbranched
+        // free-item problem.  At B&B child nodes, required retailers may have
+        // nonnegative A_i and therefore are absent from its point set.  Use the
+        // branch-embedded exact candidate generator instead.
+        if (branch && !branch->retailerBranches.empty()) {
+            return solveForPrice_Simplified(j, p_j, dual, branch);
+        }
         PricingResult result(inst->numRetailer);
         result.dcIndex = j;
         result.optimal_pj = p_j;
@@ -908,6 +968,8 @@ private:
             std::string key = vectorToKey(S);
             if (!seen.insert(key).second) continue;
             if (branch && !branch->isColumnFeasible(j, S)) continue;
+            if (!RevenueFormula::serviceSetAcceptsPrice(
+                    *inst, S, p_j)) continue;
             double rc = computeReducedCost(S, j, p_j, w_j, dual);
             if (rc > result.reducedCost) {
                 result.reducedCost = rc;
@@ -939,6 +1001,13 @@ private:
     PricingResult solveForPrice_Algorithm3(int j, double p_j,
                                             const std::vector<double>& dual,
                                             const BranchState* branch = nullptr) {
+        // Algorithm 3's geometric construction assumes every item is free.
+        // A right branch can force an item with A_i>=0, which never enters the
+        // geometric point set.  Delegate branched prices to the formulation
+        // that embeds required/forbidden retailers in all aggregate terms.
+        if (branch && !branch->retailerBranches.empty()) {
+            return solveForPrice_Simplified(j, p_j, dual, branch);
+        }
         PricingResult result(inst->numRetailer);
         result.dcIndex = j;
         result.optimal_pj = p_j;
@@ -1165,6 +1234,8 @@ private:
             }
             // 分支约束过滤：跳过违反 (j,i,value) 约束的服务集合
             if (branch && !branch->isColumnFeasible(j, S)) continue;
+            if (!RevenueFormula::serviceSetAcceptsPrice(
+                    *inst, S, p_j)) continue;
             double rc = computeReducedCost(S, j, p_j, w_j, dual);
             if (rc > bestRC) {
                 bestRC = rc;

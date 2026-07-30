@@ -139,13 +139,14 @@ public:
     double root_rmp_mip_time_limit_sec = 5.0;
 
     // ========== 公式模型选择 ==========
-    bool use_sqrt_investment = true;     // true=½δw²√D, false=½βw²（论文标准版）
+    bool use_sqrt_investment = true;     // true=½δw²D^γ, false=历史½βw²
+    double investment_exponent = 0.5;    // gamma in ½δw²D^gamma, 0<gamma<=1
 
     // ========== 投资成本处理模式 ==========
     // false（仅用于历史结果回归）：投资成本不在列利润中，事后在 BranchAndPrice::solve() 统一扣除。
     //   仅对 quadraticOnlyModel(½βw², 不依赖S) 是安全的。
     // true（新逻辑）：投资成本纳入列利润 columnProfit()，定价子问题 RC 同步含投资成本。
-    //   对 sqrtDemandModel(½δw²√D, 依赖S) 是正确的处理方式，因为 √D 依赖服务集合S，
+    //   对 demandScaleModel(½δw²D^γ, 依赖S) 是正确的处理方式，因为 D^γ 依赖服务集合S，
     //   事后扣除无法正确计算每个DC对应的 D_j 值。
     bool use_invest_in_column = true;
 
@@ -154,7 +155,8 @@ public:
                                          // false=简化凸包枚举（当前算法，更快）
                                          // 注：保留此字段仅为向后兼容，实际调度以 pricing_algorithm 为准
 
-    // 三方案对比开关：0=Simplified(简化枚举) / 1=Algorithm3(论文精确) / 2=ConvexHull(凸包剪枝)
+    // 三方案对比开关：0=Simplified / 1=Algorithm3 /
+    // 2=ConvexHull候选+Simplified校验（纯ConvexHull曾在随机穷举中漏列）
     int pricing_algorithm = 0;
 
     // 每个 DC 每轮定价返回的最多列数（multi-column pricing）。
@@ -538,6 +540,13 @@ private:
         else if (key == "bb_adaptive_stagnation_nodes") bb_adaptive_stagnation_nodes = std::stoi(value);
         else if (key == "bb_adaptive_cooldown_nodes") bb_adaptive_cooldown_nodes = std::stoi(value);
         else if (key == "use_sqrt_investment") use_sqrt_investment = toBool(value);
+        else if (key == "investment_exponent") {
+            investment_exponent = std::stod(value);
+            if (!(investment_exponent > 0.0 && investment_exponent <= 1.0)) {
+                throw std::runtime_error(
+                    "investment_exponent must satisfy 0 < gamma <= 1");
+            }
+        }
         else if (key == "use_invest_in_column") use_invest_in_column = toBool(value);
         else if (key == "use_paper_algorithm3") {
             use_paper_algorithm3 = toBool(value);

@@ -839,7 +839,8 @@ private:
                 }
             }
             sol.totalInvestmentCost += InvestmentCostFormula::compute(
-                *inst, j, w[j], D_j, config->use_sqrt_investment);
+                *inst, j, w[j], D_j, config->use_sqrt_investment,
+                config->investment_exponent);
         }
         sol.w = w;
         return sol;

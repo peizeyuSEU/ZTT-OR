@@ -92,9 +92,14 @@ public:
         if (!bpBannerPrinted) {
             std::cout << "\n  ========== [环节2/5] 分支定价 BP（固定 w_j 下精确求解整数规划） ==========" << std::endl;
             std::cout << "    设计: 列生成(求 LP 松弛) + 分支定界(恢复整数) = 分支定价" << std::endl;
-            std::cout << "    收尾: LP 目标 + 碳配额收入 - 减排投资成本(½δw²√D) = 个体适应度" << std::endl;
+            std::cout << "    收尾: LP 目标 + 碳配额收入 - 减排投资成本(½δw²D^γ) = 个体适应度" << std::endl;
             std::cout << "    优化: fitnessCache 以 w 向量为键去重，重复 w 直接返回历史利润(避免重算整棵搜索树)" << std::endl;
-            std::cout << "    投资成本模型: " << (cfg.use_sqrt_investment ? "½δw²√D(论文标准)" : "½βw²") << std::endl;
+            std::cout << "    投资成本模型: "
+                      << (cfg.use_sqrt_investment
+                              ? "½δw²D^γ, γ=" + std::to_string(
+                                    cfg.investment_exponent)
+                              : "½βw²")
+                      << std::endl;
             std::cout << "    投资成本处理: " << (cfg.use_invest_in_column ? "列内扣除(新)" : "事后扣除(旧)") << std::endl;
             bpBannerPrinted = true;
         }
@@ -193,15 +198,15 @@ public:
             // 旧逻辑(use_invest_in_column=false)：统一事后扣除减排投资成本。
             //   仅对 quadraticOnlyModel(½βw², 不依赖S) 是安全的。
             // 新逻辑(use_invest_in_column=true)：跳过事后扣除，投资成本已在列利润中。
-            //   对 sqrtDemandModel(½δw²√D, 依赖S) 是正确处理。
+            //   对 demandScaleModel(½δw²D^γ, 依赖S) 是正确处理。
             if (!config->use_invest_in_column) {
                 double investCost = 0.0;
                 for (int j = 0; j < inst->numDC; j++) {
                     double w_j = (j < (int)inst->w.size()) ? inst->w[j] : 0.0;
                     // 计算D_j需要知道该DC服务的零售商标的，
                     // 用分支定界最优解中该DC的D_j来算
-                    // 注意：对√D模型，事后扣除时D_j来源于最终解而非列生成过程中的S，
-                    //       这是旧逻辑的缺陷——√D依赖S，应在列利润中扣除。
+                    // 注意：对 D^γ 模型，事后扣除时 D_j 来源于最终解而非列生成
+                    //       过程中的 S；这是旧逻辑的缺陷，应在列利润中扣除。
                     double D_j = 0.0;
                     const Solution& sol = bnb.getBestSolution();
                     for (const auto& dcSol : sol.dcSolutions) {
@@ -213,7 +218,9 @@ public:
                         }
                     }
                     bool useSqrtModel = config ? config->use_sqrt_investment : true;
-                    investCost += InvestmentCostFormula::compute(*inst, j, w_j, D_j, useSqrtModel);
+                    investCost += InvestmentCostFormula::compute(
+                        *inst, j, w_j, D_j, useSqrtModel,
+                        config ? config->investment_exponent : 0.5);
                 }
                 result -= investCost;
             }
@@ -237,35 +244,6 @@ public:
         entry.sol = lastSolution_;
         // 以原始 w 的 key 写入，保证本次调用（及完全相同的 w）能命中。
         fitnessCache[key] = entry;
-
-        // ===== 严谨性增强：写入「规范化 w」的等价 key =====
-        // 未开启的 DC（服务集为空，D_j=0）其减排投资成本 ½δw_j²√D_j 恒为 0，
-        // 故 w_j 取任何值对总利润无影响。GA 可能给这些 DC 配非零 w_j，
-        // 使得本应等价的解产生不同 key，重复求解整棵搜索树、拉低缓存命中率。
-        // 此处按最优解的开启模式把未开 DC 的 w_j 归零，得到 canonicalW，
-        // 额外写入其 key，令后续开关模式相同的等价解可直接命中历史利润。
-        {
-            const Solution& bestSol = lastSolution_;
-            std::vector<bool> dcOpened(inst->numDC, false);
-            for (const auto& dcSol : bestSol.dcSolutions) {
-                if (dcSol.dcIndex < 0 || dcSol.dcIndex >= inst->numDC) continue;
-                for (int i = 0; i < inst->numRetailer; i++) {
-                    if (dcSol.S[i] == 1) {
-                        dcOpened[dcSol.dcIndex] = true;
-                        break;
-                    }
-                }
-            }
-            std::vector<double> canonicalW = w;
-            for (int j = 0; j < inst->numDC && j < (int)canonicalW.size(); j++) {
-                if (!dcOpened[j]) canonicalW[j] = 0.0;  // 未开 DC 的 w_j 归零
-            }
-            std::string canonicalKey = makeKey(canonicalW);
-            // 仅当规范 key 与原始 key 不同时才额外写入，避免冗余覆盖。
-            if (canonicalKey != key) {
-                fitnessCache[canonicalKey] = entry;
-            }
-        }
 
         auto end = std::chrono::steady_clock::now();
         bpTime += std::chrono::duration<double>(end - start).count();

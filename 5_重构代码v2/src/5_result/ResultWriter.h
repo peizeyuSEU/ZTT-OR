@@ -136,14 +136,16 @@ public:
         file << "  [模型]\n";
         file << "    减排系数 delta: " << config.delta << "\n";
         file << "    投资函数: "
-             << (config.use_sqrt_investment ? "1/2·delta·w^2·sqrt(D)"
-                                            : "1/2·beta·w^2 (论文标准版)")
+             << (config.use_sqrt_investment
+                     ? "1/2·delta·w^2·D^" + std::to_string(
+                           config.investment_exponent)
+                                            : "1/2·beta·w^2 (历史模型)")
              << "\n";
         const char* algo_name =
             (config.pricing_algorithm == 1)
                 ? "论文 Algorithm3 (完整凸包+余弦相似度)"
                 : (config.pricing_algorithm == 2)
-                      ? "ConvexHull 凸包剪枝 (Andrew 单调链+边界点对)"
+                      ? "ConvexHull 候选 + Simplified 完整校验"
                       : "Simplified 简化枚举 (全点对 above/below)";
         file << "    定价算法: " << algo_name << "\n\n";
 
