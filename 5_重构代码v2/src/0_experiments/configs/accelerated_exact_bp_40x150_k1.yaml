@@ -1,0 +1,41 @@
+plan_name: "accelerated_exact_bp_40x150_k1"
+plan_desc: "Recommended accelerated exact BP mode: fixed K, lossless parallel pricing, root restricted-MIP incumbent, strict CG."
+
+num_dc: 40
+num_retailers: 150
+random_seed: 32501
+run_mode: fixed_w
+
+# 完整目标函数：投资成本随服务集合变化，必须进入列利润和定价。
+use_sqrt_investment: true
+use_invest_in_column: true
+
+# 固定 K=1。不要按单个 DC 的 w 切换 K；若完整实例级证据支持 K=3，
+# 应在另一份配置中将本项整体改为 3。
+pricing_max_cols_per_dc: 1
+pricing_adaptive_cols: false
+pricing_per_dc_by_w: false
+
+# 无损墙钟加速：各 DC 的精确定价彼此独立。
+parallel_fitness: false
+parallel_pricing: true
+pricing_threads: 8
+core_budget: 8
+cplex_threads: 1
+
+# 根列池 0-1 restricted master 只构造合法整数下界，不参与上界认证。
+root_heuristic: true
+root_rmp_mip_heuristic: true
+root_rmp_mip_time_limit_sec: 5
+
+# 精确认证设置：所有节点严格 CG，gap=0；资源限制触发时只报告最好可行解、上界和gap。
+max_cg_iterations: 1000
+cg_early_stop: false
+max_branch_nodes: 10000
+bb_node_strategy: dfs
+bp_time_limit_sec: 600
+bp_relative_gap: 0
+
+experiments:
+  - name: "accelerated_exact_bp_40x150_k1_w00"
+    fixed_w: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
