@@ -63,6 +63,7 @@ private:
         Solution sol;
     };
     std::unordered_map<std::string, CacheEntry> fitnessCache;
+    Solution lastSolution_;
 
     // 最近一次 solve() 是否命中缓存（未触发真实求解），供串行累加口径判断是否计数。
     bool lastHitCache_ = false;
@@ -94,6 +95,7 @@ public:
             std::cout << "    收尾: LP 目标 + 碳配额收入 - 减排投资成本(½δw²√D) = 个体适应度" << std::endl;
             std::cout << "    优化: fitnessCache 以 w 向量为键去重，重复 w 直接返回历史利润(避免重算整棵搜索树)" << std::endl;
             std::cout << "    投资成本模型: " << (cfg.use_sqrt_investment ? "½δw²√D(论文标准)" : "½βw²") << std::endl;
+            std::cout << "    投资成本处理: " << (cfg.use_invest_in_column ? "列内扣除(新)" : "事后扣除(旧)") << std::endl;
             bpBannerPrinted = true;
         }
     }
@@ -146,6 +148,7 @@ public:
         auto cacheIt = fitnessCache.find(key);
         if (cacheIt != fitnessCache.end()) {
             lastHitCache_ = true;  // 命中缓存：本次未做真实求解，串行累加口径应跳过
+            lastSolution_ = cacheIt->second.sol;
             if (logger && !label.empty()) logger->log(1, label + "命中缓存");
             // 缓存命中不做新求解，上报当前累计时间让 monitor 保持一致
             if (monitor) {
@@ -178,39 +181,60 @@ public:
 
         // 调用分支定界求解（w已设置，无需传参）
         double result = bnb.solve();
+        lastSolution_ = bnb.getBestSolution();
         lastHitCache_ = false;  // 走到这里表示做了真实求解，串行累加口径应计入本次增量
 
         // 加回碳配额收入
         if (result > -DBL_MAX / 2) {
-            result += CarbonCreditFormula::carbonCredit(inst->p, inst->C);
-            // 统一扣除减排投资成本（在列利润中不包含，在此统一处理）
-            // 使用公式层计算：½ * δ * w_j² * √D_j（论文标准版）
-            double investCost = 0.0;
-            for (int j = 0; j < inst->numDC; j++) {
-                double w_j = (j < (int)inst->w.size()) ? inst->w[j] : 0.0;
-                // 计算D_j需要知道该DC服务的零售商标的，
-                // 但投资成本是每个DC的固定成本，不依赖具体服务集合S，
-                // 这里用分支定界最优解中该DC的D_j来算
-                double D_j = 0.0;
-                const Solution& sol = bnb.getBestSolution();
-                for (const auto& dcSol : sol.dcSolutions) {
-                    if (dcSol.dcIndex == j) {
-                        for (int i = 0; i < inst->numRetailer; i++) {
-                            if (dcSol.S[i] == 1) D_j += inst->mu[i];
+            double carbonCredit =
+                CarbonCreditFormula::carbonCredit(inst->p, inst->C);
+            result += carbonCredit;
+
+            // 旧逻辑(use_invest_in_column=false)：统一事后扣除减排投资成本。
+            //   仅对 quadraticOnlyModel(½βw², 不依赖S) 是安全的。
+            // 新逻辑(use_invest_in_column=true)：跳过事后扣除，投资成本已在列利润中。
+            //   对 sqrtDemandModel(½δw²√D, 依赖S) 是正确处理。
+            if (!config->use_invest_in_column) {
+                double investCost = 0.0;
+                for (int j = 0; j < inst->numDC; j++) {
+                    double w_j = (j < (int)inst->w.size()) ? inst->w[j] : 0.0;
+                    // 计算D_j需要知道该DC服务的零售商标的，
+                    // 用分支定界最优解中该DC的D_j来算
+                    // 注意：对√D模型，事后扣除时D_j来源于最终解而非列生成过程中的S，
+                    //       这是旧逻辑的缺陷——√D依赖S，应在列利润中扣除。
+                    double D_j = 0.0;
+                    const Solution& sol = bnb.getBestSolution();
+                    for (const auto& dcSol : sol.dcSolutions) {
+                        if (dcSol.dcIndex == j) {
+                            for (int i = 0; i < inst->numRetailer; i++) {
+                                if (dcSol.S[i] == 1) D_j += inst->mu[i];
+                            }
+                            break;
                         }
-                        break;
                     }
+                    bool useSqrtModel = config ? config->use_sqrt_investment : true;
+                    investCost += InvestmentCostFormula::compute(*inst, j, w_j, D_j, useSqrtModel);
                 }
-                bool useSqrtModel = config ? config->use_sqrt_investment : true;
-                investCost += InvestmentCostFormula::compute(*inst, j, w_j, D_j, useSqrtModel);
+                result -= investCost;
             }
-            result -= investCost;
+
+            lastSolution_.totalProfit = result;
+            lastSolution_.hasIntegerSolution = true;
+            if (config->use_invest_in_column
+                && bnb.getBestUpperBound() < DBL_MAX / 2) {
+                lastSolution_.bestBound =
+                    bnb.getBestUpperBound() + carbonCredit;
+                double denom = std::abs(result) > 1e-9
+                                   ? std::abs(result) : 1.0;
+                lastSolution_.relativeGap = std::max(
+                    0.0, (lastSolution_.bestBound - result) / denom);
+            }
         }
 
         // 存入缓存
         CacheEntry entry;
         entry.profit = result;
-        entry.sol = bnb.getBestSolution();
+        entry.sol = lastSolution_;
         // 以原始 w 的 key 写入，保证本次调用（及完全相同的 w）能命中。
         fitnessCache[key] = entry;
 
@@ -221,7 +245,7 @@ public:
         // 此处按最优解的开启模式把未开 DC 的 w_j 归零，得到 canonicalW，
         // 额外写入其 key，令后续开关模式相同的等价解可直接命中历史利润。
         {
-            const Solution& bestSol = bnb.getBestSolution();
+            const Solution& bestSol = lastSolution_;
             std::vector<bool> dcOpened(inst->numDC, false);
             for (const auto& dcSol : bestSol.dcSolutions) {
                 if (dcSol.dcIndex < 0 || dcSol.dcIndex >= inst->numDC) continue;
@@ -307,7 +331,10 @@ public:
     }
 
     /** 获取最优解 */
-    const Solution& getBestSolution() const { return bnb.getBestSolution(); }
+    const Solution& getBestSolution() const { return lastSolution_; }
+    SolveStatus getSolveStatus() const { return lastSolution_.solveStatus; }
+    double getBestBound() const { return lastSolution_.bestBound; }
+    double getRelativeGap() const { return lastSolution_.relativeGap; }
 
     /** 获取分支定界统计 */
     int getTotalNodes() const { return accTotalNodes_; }

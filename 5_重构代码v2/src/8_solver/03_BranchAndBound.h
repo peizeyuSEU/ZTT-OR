@@ -48,6 +48,8 @@ private:
     double bestUpperBound;   // 全局最小上界（根节点LP解）
     Solution bestSolution;   // 最优整数解
     double bbTime;           // 分支定界耗时
+    SolveStatus solveStatus;
+    double finalRelativeGap;
 
     // 列生成结果缓存（避免重新生成列）
     struct BnBNode {
@@ -62,7 +64,8 @@ public:
     BranchAndBound() : inst(nullptr), config(nullptr), logger(nullptr),
                        totalNodes(0), prunedNodes(0), integerSolutions(0),
                        bestLowerBound(-DBL_MAX), bestUpperBound(DBL_MAX),
-                       bbTime(0.0) {}
+                       bbTime(0.0), solveStatus(SolveStatus::NOT_STARTED),
+                       finalRelativeGap(DBL_MAX) {}
 
     void setLogger(Logger* log) {
         logger = log;
@@ -79,6 +82,7 @@ public:
 
     void setConfig(const Config& cfg) {
         config = &cfg;
+        objFormula.setConfig(cfg);
         rc_eps = cfg.rc_eps;
         columnGen.setConfig(cfg);
         columnGen.setRCEps(cfg.rc_eps);
@@ -89,9 +93,10 @@ public:
             std::cout << "\n    ========== [环节3/5] 分支定界 BB（DFS 深度优先，恢复整数解） ==========" << std::endl;
             std::cout << "      设计: 根节点列生成求 LP → 按 x_ij(DC-零售商对)分数值分支 → 左 x_ij=0 / 右 x_ij=1" << std::endl;
             std::cout << "      策略: 深度优先(DFS 栈) | 选最大分数化变量分支 | LP≤下界则剪枝" << std::endl;
-            std::cout << "      终止: 最大节点数=" << cfg.max_branch_nodes
-                      << " | 时间上限=300s | 相对 gap≤1% | 根节点为整数解直接返回" << std::endl;
-            std::cout << "      优化: 每进入 solve() 调 resetStats() 清定价缓存(w 已变) | gap/时间双终止防空转" << std::endl;
+            std::cout << "      认证: 所有节点严格列生成 | 目标gap=" << cfg.bp_relative_gap
+                      << " | 最大节点数=" << cfg.max_branch_nodes
+                      << " | 时间上限=" << cfg.bp_time_limit_sec << "s" << std::endl;
+            std::cout << "      资源限制仅改变求解状态，不允许LP值冒充整数可行解" << std::endl;
             bbBannerPrinted = true;
         }
     }
@@ -104,6 +109,9 @@ public:
     double getBestUpperBound() const { return bestUpperBound; }
     const Solution& getBestSolution() const { return bestSolution; }
     double getBBTime() const { return bbTime; }
+    SolveStatus getSolveStatus() const { return solveStatus; }
+    double getRelativeGap() const { return finalRelativeGap; }
+    bool hasIntegerSolution() const { return bestLowerBound > -DBL_MAX / 2; }
     /** 获取内部列生成的时间统计 */
     double getCGTime() const { return columnGen.getCGTime(); }
     double getPricingTime() const { return columnGen.getPricingTime(); }
@@ -135,6 +143,9 @@ public:
         integerSolutions = 0;
         bestLowerBound = -DBL_MAX;
         bestUpperBound = DBL_MAX;
+        bestSolution = Solution();
+        solveStatus = SolveStatus::NOT_STARTED;
+        finalRelativeGap = DBL_MAX;
 
         // 重置列生成和定价的统计累加器（确保多次BP调用间统计正确）
         columnGen.resetStats();
@@ -147,7 +158,14 @@ public:
         CGResult rootResult = columnGen.solve(rootState, nullptr, true);
 
         if (!rootResult.feasible) {
+            solveStatus = SolveStatus::INFEASIBLE;
+            bestSolution.solveStatus = solveStatus;
             return -DBL_MAX;  // 不可行
+        }
+        if (!rootResult.certifiedOptimal) {
+            solveStatus = SolveStatus::CG_ITERATION_LIMIT;
+            bestSolution.solveStatus = solveStatus;
+            return -DBL_MAX;
         }
 
         // 根节点LP解作为初始上界
@@ -163,6 +181,13 @@ public:
             if (!rootFractional) {
                 bestLowerBound = rootResult.lpObjective;
                 saveIntegerSolution(rootResult);
+                bestUpperBound = bestLowerBound;
+                finalRelativeGap = 0.0;
+                solveStatus = SolveStatus::OPTIMAL;
+                bestSolution.solveStatus = solveStatus;
+                bestSolution.bestBound = bestUpperBound;
+                bestSolution.relativeGap = 0.0;
+                bestSolution.hasIntegerSolution = true;
                 auto end = std::chrono::steady_clock::now();
                 // 本次 BB 纯分支时间 = 总耗时 - 列生成耗时（此处根节点即整数解，无额外分支）
                 double totalSec = std::chrono::duration<double>(end - start).count();
@@ -194,17 +219,32 @@ public:
                     + "（上界=" + std::to_string(bestUpperBound) + "）");
             }
         }
+        if (config && config->root_rmp_mip_heuristic) {
+            double mipLB = restrictedMasterMIPHeuristic(rootResult);
+            if (mipLB > bestLowerBound) {
+                bestLowerBound = mipLB;
+                if (logger) logger->progress(3, "根节点0-1 RMP启发式下界 LB="
+                    + std::to_string(bestLowerBound)
+                    + "（上界=" + std::to_string(bestUpperBound) + "）");
+            }
+        }
 
         // 终止条件参数（防止无效分支导致长时间空转）
-        const double kTimeLimitSec = 600.0;  // 时间上限（秒）
-        const double kGapTol = 0.01;         // 相对最优间隙容忍度（1%）
+        const double kTimeLimitSec = config ? config->bp_time_limit_sec : 600.0;
+        const double kGapTol = config ? std::max(0.0, config->bp_relative_gap) : 0.0;
+        bool abortedByUncertifiedCG = false;
+        long long hybridEligibleSelections = 0;
+        long long nodeSelections = 0;
+        long long lastIncumbentImprovementSelection = 0;
+        long long lastAdaptiveRestartSelection = -1000000000LL;
 
         while (!nodeStack.empty()) {
             // 时间上限终止
             auto now = std::chrono::steady_clock::now();
             double elapsed = std::chrono::duration<double>(now - start).count();
-            if (elapsed >= kTimeLimitSec) {
+            if (kTimeLimitSec > 0.0 && elapsed >= kTimeLimitSec) {
                 prunedNodes += (int)nodeStack.size();
+                solveStatus = SolveStatus::TIME_LIMIT;
                 if (logger) logger->progress(3, "达到时间上限("
                     + std::to_string((int)kTimeLimitSec) + "s)，停止分支");
                 break;
@@ -233,8 +273,10 @@ public:
             if (bestLowerBound > -DBL_MAX / 2) {
                 double denom = std::abs(bestLowerBound) > 1e-9 ? std::abs(bestLowerBound) : 1.0;
                 double gap = std::max(0.0, (bestUpperBound - bestLowerBound) / denom);
-                if (gap <= kGapTol) {
+                finalRelativeGap = gap;
+                if (kGapTol > 0.0 && gap <= kGapTol) {
                     prunedNodes += (int)nodeStack.size();
+                    solveStatus = SolveStatus::GAP_LIMIT;
                     if (logger) logger->progress(3, "达到目标间隙(gap="
                         + std::to_string(gap) + " <= " + std::to_string(kGapTol)
                         + ")，停止分支");
@@ -242,22 +284,95 @@ public:
                 }
             }
 
+            // 节点限制必须在 pop 前检查，保证所有活节点仍计入有效上界。
+            if (totalNodes >= config->max_branch_nodes) {
+                prunedNodes += nodeStack.size();
+                solveStatus = SolveStatus::NODE_LIMIT;
+                if (logger) logger->progress(3, "达到最大节点数限制("
+                    + std::to_string(config->max_branch_nodes) + ")，停止分支");
+                break;
+            }
+
             // 取出栈顶节点（DFS）
-            BnBNode currentNode = nodeStack.back();
-            nodeStack.pop_back();
+            // dfs preserves historical LIFO behavior. best_bound selects the
+            // largest certified LP bound. hybrid switches after the first
+            // integer node (root rounding alone does not trigger the switch).
+            std::string nodeStrategy =
+                config ? config->bb_node_strategy : std::string("dfs");
+            double incumbentGap = DBL_MAX;
+            if (bestLowerBound > -DBL_MAX / 2
+                && bestUpperBound < DBL_MAX / 2) {
+                double denom = std::abs(bestLowerBound) > 1e-9
+                                   ? std::abs(bestLowerBound) : 1.0;
+                incumbentGap =
+                    std::max(0.0, (bestUpperBound - bestLowerBound) / denom);
+            }
+            bool hybridEligible =
+                nodeStrategy == "hybrid"
+                && integerSolutions > 0
+                && incumbentGap <= config->bb_hybrid_switch_gap;
+            int dfsQuota = config ? std::max(0, config->bb_hybrid_dfs_quota) : 3;
+            bool hybridBestTurn =
+                hybridEligible
+                && (hybridEligibleSelections % (dfsQuota + 1) == dfsQuota);
+            int stagnationNodes =
+                config ? std::max(1, config->bb_adaptive_stagnation_nodes) : 12;
+            int cooldownNodes =
+                config ? std::max(1, config->bb_adaptive_cooldown_nodes) : 12;
+            bool adaptiveBestTurn =
+                nodeStrategy == "adaptive"
+                && integerSolutions > 0
+                && incumbentGap <= config->bb_hybrid_switch_gap
+                && nodeSelections - lastIncumbentImprovementSelection >= stagnationNodes
+                && nodeSelections - lastAdaptiveRestartSelection >= cooldownNodes;
+            bool chooseBestBound =
+                nodeStrategy == "best_bound" || hybridBestTurn || adaptiveBestTurn;
+            if (hybridEligible) {
+                hybridEligibleSelections++;
+                if (logger && (hybridBestTurn || hybridEligibleSelections == 1)) {
+                    logger->log(
+                        2,
+                        "[BB-NODESEL] strategy=hybrid choice="
+                            + std::string(hybridBestTurn ? "best_bound" : "dfs")
+                            + " eligibleCount="
+                            + std::to_string(hybridEligibleSelections)
+                            + " active=" + std::to_string(nodeStack.size())
+                            + " gap=" + std::to_string(incumbentGap));
+                }
+            } else if (nodeStrategy == "hybrid") {
+                hybridEligibleSelections = 0;
+            }
+            if (adaptiveBestTurn) {
+                lastAdaptiveRestartSelection = nodeSelections;
+                if (logger) {
+                    logger->log(
+                        2,
+                        "[BB-NODESEL] strategy=adaptive choice=best_bound"
+                            " selection=" + std::to_string(nodeSelections + 1)
+                            + " stagnant="
+                            + std::to_string(
+                                nodeSelections - lastIncumbentImprovementSelection)
+                            + " active=" + std::to_string(nodeStack.size())
+                            + " gap=" + std::to_string(incumbentGap));
+                }
+            }
+            size_t selectedNode = nodeStack.size() - 1;
+            if (chooseBestBound) {
+                for (size_t idx = 0; idx < nodeStack.size(); idx++) {
+                    if (nodeStack[idx].cgResult.lpObjective
+                        > nodeStack[selectedNode].cgResult.lpObjective) {
+                        selectedNode = idx;
+                    }
+                }
+            }
+            BnBNode currentNode = nodeStack[selectedNode];
+            nodeStack.erase(nodeStack.begin() + selectedNode);
+            nodeSelections++;
 
             // 剪枝检查：如果当前节点的LP解 ≤ bestLowerBound，则剪枝
             if (currentNode.cgResult.lpObjective <= bestLowerBound + 1e-6) {
                 prunedNodes++;
                 continue;
-            }
-
-            // 如果节点数超过限制，停止分支
-            if (totalNodes >= config->max_branch_nodes) {
-                prunedNodes += nodeStack.size();
-                if (logger) logger->progress(3, "达到最大节点数限制("
-                    + std::to_string(config->max_branch_nodes) + ")，停止分支");
-                break;
             }
 
             // ===== 4. 选择分支变量 + 整数判据（方案 B：统一 x_ij 口径） =====
@@ -271,9 +386,21 @@ public:
             if (!hasFractional) {
                 // 所有(未固定的) x_ij 都是整数：当前 LP 解即整数可行解
                 if (currentNode.cgResult.lpObjective > bestLowerBound) {
+                    double previousLowerBound = bestLowerBound;
                     bestLowerBound = currentNode.cgResult.lpObjective;
                     saveIntegerSolution(currentNode.cgResult);
                     integerSolutions++;
+                    lastIncumbentImprovementSelection = nodeSelections;
+                    if (logger) {
+                        logger->log(
+                            2,
+                            "[BB-INCUMBENT] selection="
+                                + std::to_string(nodeSelections)
+                                + " node=" + std::to_string(totalNodes)
+                                + " previous=" + std::to_string(previousLowerBound)
+                                + " value=" + std::to_string(bestLowerBound)
+                                + " active=" + std::to_string(nodeStack.size()));
+                    }
                 }
                 continue;
             }
@@ -293,28 +420,38 @@ public:
             // selectBranchingVariable(x_ij 口径)，避免 childResult.isInteger 的 z 口径埋雷。
             {
                 BranchState childState = currentNode.state.branchOnRetailer(id_j, id_i, 0);
-                CGResult childResult = columnGen.solve(childState, &currentNode.cgResult);
+                CGResult childResult = columnGen.solve(
+                    childState, &currentNode.cgResult, true);
 
-                if (childResult.feasible
+                if (childResult.feasible && !childResult.certifiedOptimal) {
+                    solveStatus = SolveStatus::CG_ITERATION_LIMIT;
+                    abortedByUncertifiedCG = true;
+                } else if (childResult.feasible
                     && childResult.lpObjective > bestLowerBound + 1e-6) {
                     nodeStack.emplace_back(childState, childResult);
                 } else {
                     prunedNodes++;
                 }
             }
+            if (abortedByUncertifiedCG) break;
 
             // 5b. 右分支：x_ij = 1（DC j 必须服务零售商 i）
             {
                 BranchState childState = currentNode.state.branchOnRetailer(id_j, id_i, 1);
-                CGResult childResult = columnGen.solve(childState, &currentNode.cgResult);
+                CGResult childResult = columnGen.solve(
+                    childState, &currentNode.cgResult, true);
 
-                if (childResult.feasible
+                if (childResult.feasible && !childResult.certifiedOptimal) {
+                    solveStatus = SolveStatus::CG_ITERATION_LIMIT;
+                    abortedByUncertifiedCG = true;
+                } else if (childResult.feasible
                     && childResult.lpObjective > bestLowerBound + 1e-6) {
                     nodeStack.emplace_back(childState, childResult);
                 } else {
                     prunedNodes++;
                 }
             }
+            if (abortedByUncertifiedCG) break;
         }
 
         auto end = std::chrono::steady_clock::now();
@@ -323,16 +460,47 @@ public:
         double totalSec = std::chrono::duration<double>(end - start).count();
         bbTime = std::max(0.0, totalSec - columnGen.getCGTime());
 
-        // 如果没找到整数解，返回根节点LP解作为近似
-        if (bestLowerBound <= -DBL_MAX / 2) {
-            bestLowerBound = rootResult.lpObjective;
+        // 只有搜索树耗尽且所有节点均完成认证，才能声明最优。
+        if (nodeStack.empty() && solveStatus == SolveStatus::NOT_STARTED) {
+            solveStatus = bestLowerBound > -DBL_MAX / 2
+                              ? SolveStatus::OPTIMAL
+                              : SolveStatus::NO_INTEGER_SOLUTION;
+            if (solveStatus == SolveStatus::OPTIMAL) {
+                bestUpperBound = bestLowerBound;
+                finalRelativeGap = 0.0;
+            }
         }
+
+        // 没找到整数解时绝不返回根节点LP值。
+        if (bestLowerBound <= -DBL_MAX / 2) {
+            if (solveStatus == SolveStatus::NOT_STARTED) {
+                solveStatus = SolveStatus::NO_INTEGER_SOLUTION;
+            }
+            bestSolution.solveStatus = solveStatus;
+            bestSolution.bestBound = bestUpperBound;
+            bestSolution.relativeGap = finalRelativeGap;
+            bestSolution.hasIntegerSolution = false;
+            return -DBL_MAX;
+        }
+
+        if (finalRelativeGap == DBL_MAX && bestUpperBound < DBL_MAX / 2) {
+            double denom = std::abs(bestLowerBound) > 1e-9
+                               ? std::abs(bestLowerBound) : 1.0;
+            finalRelativeGap = std::max(
+                0.0, (bestUpperBound - bestLowerBound) / denom);
+        }
+        bestSolution.solveStatus = solveStatus;
+        bestSolution.bestBound = bestUpperBound;
+        bestSolution.relativeGap = finalRelativeGap;
+        bestSolution.hasIntegerSolution = true;
 
         if (logger) {
             logger->progress(3, "分支定界结束：探索 " + std::to_string(totalNodes)
                 + " 节点，剪枝 " + std::to_string(prunedNodes)
                 + "，整数解 " + std::to_string(integerSolutions)
-                + "，最优 obj=" + std::to_string(bestLowerBound));
+                + "，状态=" + std::string(solveStatusName(solveStatus))
+                + "，最好可行 obj=" + std::to_string(bestLowerBound)
+                + "，gap=" + std::to_string(finalRelativeGap));
         }
 
         return bestLowerBound;
@@ -455,6 +623,7 @@ private:
                   [](const Cand& a, const Cand& b) { return a.z > b.z; });
         std::vector<int> retailerUsed(numRetailer, 0);
         std::vector<int> dcUsed;
+        Solution heuristicSolution;
         double heuristicProfit = 0.0;
         int chosenCols = 0;
         for (const auto& c : cands) {
@@ -470,11 +639,124 @@ private:
                 if (S[i] == 1) retailerUsed[i] = 1;
             dcUsed.push_back(c.j);
             double pj = rootResult.p_j[c.j][c.k];
-            heuristicProfit += objFormula.columnProfit(*inst, c.j, S, pj, inst->w[c.j]);
+            double colProfit = objFormula.columnProfit(
+                *inst, c.j, S, pj, inst->w[c.j]);
+            heuristicProfit += colProfit;
+            DCSolution dcSol;
+            dcSol.dcIndex = c.j;
+            dcSol.w = inst->w[c.j];
+            dcSol.p = pj;
+            dcSol.S = S;
+            dcSol.profit = colProfit;
+            heuristicSolution.dcSolutions.push_back(dcSol);
             chosenCols++;
         }
         if (chosenCols == 0) return -DBL_MAX;
+        heuristicSolution.totalProfit = heuristicProfit;
+        heuristicSolution.w = inst->w;
+        heuristicSolution.hasIntegerSolution = true;
+        bestSolution = heuristicSolution;
+        integerSolutions++;
         return heuristicProfit;
+    }
+
+    // 在根节点严格列生成已经得到的有限列池上求解一个短时 0-1 restricted master。
+    // 其解由原问题的合法列组成，故始终是原整数主问题的可行解；只用于抬高下界，
+    // 不参与上界或最优性认证，时间到仍不影响 Branch-and-Price 的精确性。
+    double restrictedMasterMIPHeuristic(const CGResult& rootResult) {
+        if (!inst) return -DBL_MAX;
+        IloEnv env;
+        try {
+            IloModel model(env);
+            IloObjective objective = IloAdd(model, IloMaximize(env));
+            IloRangeArray retailerRows(
+                env, inst->numRetailer, -IloInfinity, 1.0);
+            IloRangeArray dcRows(
+                env, inst->numDC, -IloInfinity, 1.0);
+            model.add(retailerRows);
+            model.add(dcRows);
+
+            IloArray<IloNumVarArray> y(env, inst->numDC);
+            for (int j = 0; j < inst->numDC; j++) {
+                y[j] = IloNumVarArray(env);
+                if (j >= (int)rootResult.j_S.size()) continue;
+                for (int k = 0; k < (int)rootResult.j_S[j].size(); k++) {
+                    const auto& S = rootResult.j_S[j][k];
+                    double pj = (j < (int)rootResult.p_j.size()
+                                 && k < (int)rootResult.p_j[j].size())
+                                    ? rootResult.p_j[j][k] : 0.0;
+                    double profit = objFormula.columnProfit(
+                        *inst, j, S, pj, inst->w[j]);
+                    IloNumColumn col = objective(profit) + dcRows[j](1.0);
+                    for (int i = 0; i < inst->numRetailer && i < (int)S.size(); i++) {
+                        if (S[i] == 1) col += retailerRows[i](1.0);
+                    }
+                    y[j].add(IloNumVar(col, 0.0, 1.0, ILOBOOL));
+                }
+            }
+
+            IloCplex cplex(model);
+            cplex.setOut(env.getNullStream());
+            cplex.setWarning(env.getNullStream());
+            cplex.setParam(IloCplex::Threads, 1);
+            double timeLimit = config
+                ? std::max(0.01, config->root_rmp_mip_time_limit_sec) : 5.0;
+            cplex.setParam(IloCplex::TiLim, timeLimit);
+            cplex.setParam(IloCplex::MIPDisplay, 0);
+
+            if (!cplex.solve()
+                || !(cplex.getStatus() == IloAlgorithm::Optimal
+                     || cplex.getStatus() == IloAlgorithm::Feasible)) {
+                env.end();
+                return -DBL_MAX;
+            }
+
+            double profit = cplex.getObjValue();
+            if (profit <= bestLowerBound + rc_eps) {
+                env.end();
+                return profit;
+            }
+
+            Solution candidate;
+            candidate.totalProfit = profit;
+            candidate.w = inst->w;
+            candidate.hasIntegerSolution = true;
+            std::vector<int> served(inst->numRetailer, 0);
+            for (int j = 0; j < inst->numDC; j++) {
+                for (int k = 0; k < y[j].getSize(); k++) {
+                    if (cplex.getValue(y[j][k]) <= 0.5) continue;
+                    DCSolution dcSol;
+                    dcSol.dcIndex = j;
+                    dcSol.w = inst->w[j];
+                    dcSol.p = rootResult.p_j[j][k];
+                    dcSol.S = rootResult.j_S[j][k];
+                    dcSol.profit = objFormula.columnProfit(
+                        *inst, j, dcSol.S, dcSol.p, dcSol.w);
+                    candidate.dcSolutions.push_back(dcSol);
+                    candidate.numDCsOpen++;
+                    for (int i = 0; i < inst->numRetailer
+                                    && i < (int)dcSol.S.size(); i++) {
+                        if (dcSol.S[i] == 1 && !served[i]) {
+                            served[i] = 1;
+                            candidate.numRtsServed++;
+                        }
+                    }
+                }
+            }
+            bestSolution = candidate;
+            integerSolutions++;
+            env.end();
+            return profit;
+        } catch (const IloException& e) {
+            if (logger) logger->log(
+                1, std::string("[BB-ROOT-RMIP] CPLEX exception: ") + e.getMessage());
+            env.end();
+            return -DBL_MAX;
+        } catch (...) {
+            if (logger) logger->log(1, "[BB-ROOT-RMIP] unknown exception");
+            env.end();
+            return -DBL_MAX;
+        }
     }
 };
 

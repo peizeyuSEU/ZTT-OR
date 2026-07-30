@@ -105,6 +105,7 @@ public:
 
     void setConfig(const Config& cfg) {
         config = &cfg;
+        objFormula.setConfig(cfg);
         for (auto& ps : pricingSolvers_) ps.setConfig(cfg);
 
         // ===== 定价线程池：按"总核预算"约束下的线程数创建（幂等，可重复调用） =====
@@ -179,8 +180,8 @@ public:
             std::cout << "        优化: 每DC持久 PricingSolver(缓存跨迭代保留) + 持久线程池(不再每轮建销)" << std::endl;
             std::cout << "\n      ========== [环节5/5] 定价子问题 PS（每DC生成最大负 RC 列，本次瓶颈~83%） ==========" << std::endl;
             std::cout << "        算法: " << (cfg.use_paper_algorithm3 ? "论文Algorithm3(完整凸包+余弦相似度)" : "简化凸包枚举(两点组合)") << std::endl;
-            std::cout << "        快路径: cachedBestCols在当前对偶下算 RC，>阈值直接命中 O(零售商数)" << std::endl;
-            std::cout << "        慢路径: 候选价格(保留价去重)×两点组合 O(候选价×n_neg²×numRetailer)" << std::endl;
+            std::cout << "        无损缓存: cachedBestCols仅提供 incumbent/上界剪枝，不跳过完整定价" << std::endl;
+            std::cout << "        完整定价: 候选价格(保留价去重)×两点组合 O(候选价×n_neg²×numRetailer)" << std::endl;
             cgBannerPrinted = true;
         }
     }
@@ -258,6 +259,48 @@ public:
         auto start = std::chrono::steady_clock::now();
         CGResult result;
         result.feasible = false;
+        const int nodeStartIterations = totalIterations;
+        const int nodeStartColumns = totalColumns;
+        const double nodeStartPricingTime = getPricingTime();
+        const double nodeStartCplexSolveTime = cplexSolveTime;
+        long long nodePositiveCandidates = 0;
+        long long nodeNewColumns = 0;
+        long long nodeDuplicateCandidates = 0;
+        long long nodeUpdatedColumns = 0;
+        int nodeZeroImproveIterations = 0;
+        double nodeFirstObjective = 0.0;
+        double nodeLastObjective = 0.0;
+        double nodePreviousObjective = 0.0;
+        double nodeMaxReducedCost = -DBL_MAX;
+        bool nodeHasObjective = false;
+        auto logNodeDiagnostic = [&](const char* exitReason) {
+            if (!logger) return;
+            const double nodeWall = std::chrono::duration<double>(
+                std::chrono::steady_clock::now() - start).count();
+            const double objectiveGain = nodeHasObjective
+                                             ? nodeLastObjective - nodeFirstObjective
+                                             : 0.0;
+            logger->log(2, "[CG-NODE] depth="
+                + std::to_string(branchState.retailerBranches.size())
+                + " exit=" + std::string(exitReason)
+                + " certified=" + std::to_string(result.certifiedOptimal ? 1 : 0)
+                + " feasible=" + std::to_string(result.feasible ? 1 : 0)
+                + " iters=" + std::to_string(totalIterations - nodeStartIterations)
+                + " generatedColsBeforeNode=" + std::to_string(nodeStartColumns)
+                + " newCols=" + std::to_string(nodeNewColumns)
+                + " posCandidates=" + std::to_string(nodePositiveCandidates)
+                + " duplicateCandidates=" + std::to_string(nodeDuplicateCandidates)
+                + " updatedCols=" + std::to_string(nodeUpdatedColumns)
+                + " zeroObjImproveIters=" + std::to_string(nodeZeroImproveIterations)
+                + " objFirst=" + std::to_string(nodeFirstObjective)
+                + " objLast=" + std::to_string(nodeLastObjective)
+                + " objGain=" + std::to_string(objectiveGain)
+                + " maxRC=" + std::to_string(nodeMaxReducedCost)
+                + " wallSec=" + std::to_string(nodeWall)
+                + " pricingSec=" + std::to_string(getPricingTime() - nodeStartPricingTime)
+                + " cplexSolveSec="
+                + std::to_string(cplexSolveTime - nodeStartCplexSolveTime));
+        };
 
         // 方案A：每次进入新节点(新 LP)时重置对偶平滑历史，避免跨节点串味。
         hasSmoothedDual_ = false;
@@ -359,11 +402,21 @@ public:
             IloObjective totalProfit = IloAdd(model, IloMaximize(envRaw));
 
             int numConstraints = numRetailer + numDC;
+            IloNumArray low(envRaw, numConstraints);
             IloNumArray up(envRaw, numConstraints);
             for (int k = 0; k < numConstraints; k++) {
+                low[k] = -IloInfinity;
                 up[k] = 1;
             }
-            IloRangeArray Fill = IloAdd(model, IloRangeArray(envRaw, -IloInfinity, up));
+            // x_ij=1 分支不能只过滤掉 S[i]=0 的列；DC 约束原本是 <=1，
+            // 仍允许一列都不选。只要某个 retailer 被该 DC 强制服务，就把
+            // 该 DC 的列和约束改成 =1；结合列过滤后才真正等价于 x_ij=1。
+            for (const auto& rb : branchState.retailerBranches) {
+                if (rb.value == 1 && rb.dcIndex >= 0 && rb.dcIndex < numDC) {
+                    low[numRetailer + rb.dcIndex] = 1.0;
+                }
+            }
+            IloRangeArray Fill = IloAdd(model, IloRangeArray(envRaw, low, up));
 
             IloArray<IloNumVarArray> z_j(envRaw);
 
@@ -378,7 +431,9 @@ public:
                     }
                     int kk = numRetailer + j;
                     col = col + Fill[kk](1);
-                    z_j_s.add(IloNumVar(col, 0, 1, ILOFLOAT));
+                    // 单列上界由 DC 约束 Σ_S z_{j,S}≤1 隐含保证。
+                    // 不再额外设置 z≤1，避免定价 RC 漏掉变量上界对偶。
+                    z_j_s.add(IloNumVar(col, 0, IloInfinity, ILOFLOAT));
                 }
                 z_j.add(z_j_s);
             }
@@ -436,6 +491,7 @@ public:
             double prevObj = 0.0;
             bool hasPrevObj = false;
             int stallCount = 0;
+            bool adaptiveMultiActive = false;
 
             for (int iter = 0; iter < maxCgIter; iter++) {
                 totalIterations++;
@@ -456,24 +512,36 @@ public:
                     result.feasible = false;
                     auto end = std::chrono::steady_clock::now();
                     cgTime += std::chrono::duration<double>(end - start).count();
+                    logNodeDiagnostic("RMP_INFEASIBLE");
                     return result;
                 }
 
                 double objValue = cplex.getObjValue();
+                if (!nodeHasObjective) {
+                    nodeFirstObjective = objValue;
+                    nodePreviousObjective = objValue;
+                    nodeHasObjective = true;
+                } else {
+                    const double improve = objValue - nodePreviousObjective;
+                    const double scale = std::max(1.0, std::abs(nodePreviousObjective));
+                    if (std::abs(improve) <= 1.0e-9 * scale) {
+                        nodeZeroImproveIterations++;
+                    }
+                    nodePreviousObjective = objValue;
+                }
+                nodeLastObjective = objValue;
 
                 // 4b. tailing-off 早停：连续多轮目标值几乎不再改善则提前收敛。
                 //     列生成尾部常反复加入 RC 微正列，目标值实质不变，
                 //     仅靠 rc_eps 过严会导致上万轮无效迭代，此处按相对改善量兜底。
-                if (cgEarlyStop) {
-                    if (hasPrevObj) {
-                        double denom = std::max(1.0, std::abs(prevObj));
-                        double relImprove = std::abs(objValue - prevObj) / denom;
-                        if (relImprove < stallTol) stallCount++;
-                        else stallCount = 0;
-                    }
-                    prevObj = objValue;
-                    hasPrevObj = true;
+                if (hasPrevObj) {
+                    double denom = std::max(1.0, std::abs(prevObj));
+                    double relImprove = std::abs(objValue - prevObj) / denom;
+                    if (relImprove < stallTol) stallCount++;
+                    else stallCount = 0;
                 }
+                prevObj = objValue;
+                hasPrevObj = true;
 
                 // 4c. 检查整数性
                 bool isInteger = true;
@@ -603,6 +671,45 @@ public:
                 int pricingCalls = 0;  // 本次调定价的次数
                 double maxRC = -1e100;
                 int rcPositiveCount = 0;
+                int maxColsPerDC = config ? config->pricing_max_cols_per_dc : 1;
+                // Hysteresis: once a node has exhibited genuine tailing-off,
+                // keep Top-K active for the remainder of this node's CG solve.
+                // A child node starts a fresh solve (and therefore starts at K=1).
+                // Immediate K=3 -> K=1 fallback caused repeated mode oscillation
+                // and failed to escape degeneracy on the w=0.5 large instance.
+                bool adaptiveMultiNow =
+                    adaptiveMultiActive
+                    || (config && config->pricing_adaptive_cols
+                        && stallCount >= std::max(
+                            1, config->pricing_adaptive_stall_iterations));
+                if (adaptiveMultiNow) {
+                    maxColsPerDC = std::max(
+                        maxColsPerDC,
+                        std::max(1, config->pricing_adaptive_max_cols));
+                }
+                std::vector<int> maxColsByDC(numDC, maxColsPerDC);
+                if (config && config->pricing_per_dc_by_w && inst) {
+                    int highWCols = std::max(
+                        maxColsPerDC,
+                        std::max(1, config->pricing_high_w_max_cols));
+                    for (int j = 0; j < numDC && j < (int)inst->w.size(); j++) {
+                        if (inst->w[j] >= config->pricing_high_w_threshold) {
+                            maxColsByDC[j] = highWCols;
+                        }
+                    }
+                }
+                if (adaptiveMultiNow != adaptiveMultiActive) {
+                    adaptiveMultiActive = adaptiveMultiNow;
+                    if (logger) {
+                        logger->log(
+                            2,
+                            "[CG-ADAPT-K] mode="
+                                + std::string(adaptiveMultiNow ? "multi" : "single")
+                                + " K=" + std::to_string(maxColsPerDC)
+                                + " stall=" + std::to_string(stallCount)
+                                + " iter=" + std::to_string(totalIterations));
+                    }
+                }
 
                 if (numDC > 1 && config && config->parallel_pricing && pricingPool_) {
                     // 并行求解各DC的定价子问题。
@@ -610,19 +717,19 @@ public:
                     // 跨迭代保留；每个DC下标只被一个线程访问，天然无锁。
                     // 线程池 pricingPool_ 全程复用，避免每轮建销线程。
                     auto parStart = std::chrono::steady_clock::now();
-                    int maxColsPerDC = config ? config->pricing_max_cols_per_dc : 1;
                     std::vector<std::future<std::vector<PricingResult>>> pFutures(numDC);
                     for (int j = 0; j < numDC; j++) {
+                        int colsForDC = maxColsByDC[j];
                         pFutures[j] = pricingPool_->enqueue(
-                            [this, j, &dualVec, &branchState, maxColsPerDC]() {
-                                if (maxColsPerDC <= 1) {
+                            [this, j, &dualVec, &branchState, colsForDC]() {
+                                if (colsForDC <= 1) {
                                     std::vector<PricingResult> r;
                                     r.push_back(
                                         pricingSolvers_[j].solve(j, dualVec, &branchState));
                                     return r;
                                 }
                                 return pricingSolvers_[j].solveMulti(
-                                    j, dualVec, maxColsPerDC, &branchState);
+                                    j, dualVec, colsForDC, &branchState);
                             });
                     }
                     for (int j = 0; j < numDC; j++) {
@@ -646,9 +753,9 @@ public:
                     parallelPricingWallTime_ += std::chrono::duration<double>(
                         std::chrono::steady_clock::now() - parStart).count();
                 } else {
-                    int maxColsPerDC = config ? config->pricing_max_cols_per_dc : 1;
                     for (int j = 0; j < numDC; j++) {
-                        if (maxColsPerDC <= 1) {
+                        int colsForDC = maxColsByDC[j];
+                        if (colsForDC <= 1) {
                             PricingResult pr = pricingSolvers_[j].solve(j, dualVec, &branchState);
                             pricingCalls++;
                             if (pr.reducedCost > maxRC) maxRC = pr.reducedCost;
@@ -658,7 +765,7 @@ public:
                             }
                         } else {
                             std::vector<PricingResult> prs =
-                                pricingSolvers_[j].solveMulti(j, dualVec, maxColsPerDC, &branchState);
+                                pricingSolvers_[j].solveMulti(j, dualVec, colsForDC, &branchState);
                             pricingCalls++;
                             // 首列为该DC最优列，用于维持 maxRC / rcPositiveCount 的原有口径
                             if (!prs.empty()) {
@@ -670,6 +777,8 @@ public:
                     }
                 }
                 lastIterPricingCalls_ = pricingCalls;
+                nodePositiveCandidates += static_cast<long long>(positiveCols.size());
+                if (maxRC > nodeMaxReducedCost) nodeMaxReducedCost = maxRC;
 
                 // 4e2. tailing-off 早停触发：连续多轮改善不足，视为已实质收敛。
                 //      此时 result 已在整数性检查段填充完整，可直接返回当前 LP 解。
@@ -695,6 +804,7 @@ public:
 #endif
                     auto end = std::chrono::steady_clock::now();
                     cgTime += std::chrono::duration<double>(end - start).count();
+                    logNodeDiagnostic("TAILING_OFF");
                     return result;
                 }
 
@@ -740,6 +850,7 @@ public:
 
                 // 4f. 收敛判断
                 if (positiveCols.empty()) {
+                    result.certifiedOptimal = true;
                     if (logger) {
                         if (consoleProgress_)
                             logger->progress(2, "列生成收敛，共 " + std::to_string(totalIterations) + " 轮迭代");
@@ -748,6 +859,7 @@ public:
                     }
                     auto end = std::chrono::steady_clock::now();
                     cgTime += std::chrono::duration<double>(end - start).count();
+                    logNodeDiagnostic("CERTIFIED");
                     return result;
                 }
 
@@ -802,11 +914,11 @@ public:
                         } catch (const IloException&) {
                             dupVal = 0.0;
                         }
-                        bool atUpperBound = (dupVal >= 1.0 - rc_eps);
+                        (void)dupVal;
 
-                        // 仅当该列尚未顶上界(还能增大)且新利润确有提升时，才更新既有列系数，
-                        // 使 LP 能继续推进直至真收敛；这类更新才算“真正能改进”。
-                        if (!atUpperBound && dupPos >= 0
+                        // 相同服务集合只保留利润最高的价格。只要新价格提高列系数，
+                        // 就更新 RMP；DC 约束本身负责 z≤1，无需检查冗余变量上界。
+                        if (dupPos >= 0
                             && newProfit > profits[optJ][dupPos] + rc_eps) {
                             totalProfit.setLinearCoef(z_j[optJ][dupPos], newProfit);
                             profits[optJ][dupPos] = newProfit;
@@ -825,7 +937,8 @@ public:
                     }
                     int jIdx = numRetailer + optJ;
                     col = col + Fill[jIdx](1);
-                    z_j[optJ].add(IloNumVar(col, 0, 1, ILOFLOAT));
+                    z_j[optJ].add(IloNumVar(
+                        col, 0, IloInfinity, ILOFLOAT));
 
                     j_S[optJ].push_back(optS);
                     p_j[optJ].push_back(optPj);
@@ -839,6 +952,10 @@ public:
                 dbgAddColTimeTotal_ += std::chrono::duration<double>(
                     std::chrono::steady_clock::now() - addColStart).count();
 #endif
+                nodeNewColumns += newColsThisIter;
+                nodeDuplicateCandidates +=
+                    static_cast<long long>(positiveCols.size() - newColsThisIter);
+                nodeUpdatedColumns += addedThisIter - newColsThisIter;
 
                 // [临时诊断] 尾部空转分析：对比"RC>0列/真新列/真能改进列"三个数，
                 // 判断尾部是"持续产出新结构在慢慢爬"还是"反复产出无效列在空转"。
@@ -907,6 +1024,11 @@ public:
                         if (consoleProgress_) logger->progress(2, msg);
                         else logger->log(2, msg);
                     }
+                    // 定价仍报告正 RC，却没有任何可新增或可更新列，说明定价与
+                    // RMP 列池尚未形成可验证的一致最优性证书。精确 BP 不允许
+                    // 把这种停滞冒充收敛。
+                    result.certifiedOptimal = false;
+                    result.iterationLimitReached = true;
 #ifdef CG_DIAG
                     {
                         std::string timeMsg = "[DIAG-TIME] CG退出 iters="
@@ -918,6 +1040,11 @@ public:
                         if (logger) logger->log(2, timeMsg);
                     }
 #endif
+                    {
+                        auto end = std::chrono::steady_clock::now();
+                        cgTime += std::chrono::duration<double>(end - start).count();
+                    }
+                    logNodeDiagnostic("NO_EFFECTIVE_COLUMN");
                     return result;
                 }
             }
@@ -928,10 +1055,18 @@ public:
         } catch (const std::exception& ex) {
             std::cerr << "[ColumnGeneration] 异常: " << ex.what() << std::endl;
             result.feasible = false;
-        }
+            }
 
-        auto end = std::chrono::steady_clock::now();
+            // 达到迭代上限时，当前 RMP 解没有完成 reduced-cost 最优性认证。
+            // 它不能作为分支定界节点的有效 LP 上界。
+            result.iterationLimitReached = true;
+            result.certifiedOptimal = false;
+            if (logger) {
+                logger->log(2, "列生成达到最大迭代次数，节点LP未完成最优性认证");
+            }
+            auto end = std::chrono::steady_clock::now();
         cgTime += std::chrono::duration<double>(end - start).count();
+        logNodeDiagnostic(result.feasible ? "ITERATION_LIMIT" : "EXCEPTION");
         return result;
     }
 };

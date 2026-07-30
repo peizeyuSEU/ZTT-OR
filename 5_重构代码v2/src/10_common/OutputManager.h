@@ -3,9 +3,12 @@
 
 #include <string>
 #include <ctime>
+#include <chrono>
 #include <sstream>
 #include <iomanip>
 #include <sys/stat.h>
+#include <cerrno>
+#include <stdexcept>
 
 // 输出根目录：由编译期宏 OUTPUT_ROOT 指定（Build.mk 传入 v2 绝对/相对路径），
 // 未定义时退回当前工作目录，保证任意目录运行都固定落到同一处。
@@ -27,10 +30,8 @@ public:
         std::string root = rootPrefix();
         mkdir((root + "results").c_str(), 0755);
         std::string base = root + "results/single";
-        std::string dir = base + "/" + timestamp() + "_" + configName + "/";
         mkdir(base.c_str(), 0755);
-        mkdir(dir.c_str(), 0755);
-        return dir;
+        return createUniqueDir(base, configName);
     }
 
     /** 为批量实验创建输出目录 */
@@ -38,10 +39,8 @@ public:
         std::string root = rootPrefix();
         mkdir((root + "results").c_str(), 0755);
         std::string base = root + "results/experiment";
-        std::string dir = base + "/" + timestamp() + "_" + planName + "/";
         mkdir(base.c_str(), 0755);
-        mkdir(dir.c_str(), 0755);
-        return dir;
+        return createUniqueDir(base, planName);
     }
 
     /** 在批量实验目录下为单个条目创建子目录 */
@@ -63,11 +62,30 @@ private:
     }
 
     static std::string timestamp() {
-        auto now = std::time(nullptr);
-        auto tm = *std::localtime(&now);
+        const auto now = std::chrono::system_clock::now();
+        const auto inTimeT = std::chrono::system_clock::to_time_t(now);
+        const auto tm = *std::localtime(&inTimeT);
+        const auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(
+            now.time_since_epoch()).count() % 1000;
         std::stringstream ss;
-        ss << std::put_time(&tm, "%Y%m%d_%H%M%S");
+        ss << std::put_time(&tm, "%Y%m%d_%H%M%S")
+           << "_" << std::setw(3) << std::setfill('0') << millis;
         return ss.str();
+    }
+
+    static std::string createUniqueDir(const std::string& base,
+                                       const std::string& label) {
+        const std::string safeLabel = label.empty() ? "unnamed" : label;
+        const std::string stem = base + "/" + timestamp() + "_" + safeLabel;
+        for (int suffix = 0; suffix < 10000; ++suffix) {
+            const std::string dir =
+                stem + (suffix == 0 ? "" : "_" + std::to_string(suffix)) + "/";
+            if (mkdir(dir.c_str(), 0755) == 0) return dir;
+            if (errno != EEXIST) {
+                throw std::runtime_error("Failed to create output directory: " + dir);
+            }
+        }
+        throw std::runtime_error("Unable to allocate a unique output directory");
     }
 };
 

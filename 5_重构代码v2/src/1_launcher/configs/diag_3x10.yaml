@@ -6,7 +6,7 @@ num_retailers: 10
 population_size: 1
 max_generation: 1
 crossover_rate: 0.7
-mutation_rate: 0.2
+mutation_rate: -1                 # <=0：逐位变异率自适应为1/染色体总长度
 elitism: true
 chromosome_length: 10
 min_w: 0.0

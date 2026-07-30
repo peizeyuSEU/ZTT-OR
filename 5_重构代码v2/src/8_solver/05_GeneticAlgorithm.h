@@ -157,6 +157,10 @@ public:
         int maxGen = config->max_generation;
         int chromLen = config->chromosome_length;
         int geneLength = chromLen * inst->numDC;
+        double effectiveMutationRate =
+            config->mutation_rate > 0.0
+                ? config->mutation_rate
+                : 1.0 / static_cast<double>(geneLength);
 
         bestFitness = -DBL_MAX;
         bestW.resize(inst->numDC, 0.0);
@@ -170,7 +174,8 @@ public:
         std::cout << "  配置: 种群=" << popSize << " | 最大代数=" << maxGen
                   << " | 编码位数=" << chromLen << "/DC | 基因总长=" << geneLength << std::endl;
         std::cout << "        交叉率=" << config->crossover_rate
-                  << " | 变异率=" << config->mutation_rate
+                  << " | 逐位变异率=" << effectiveMutationRate
+                  << (config->mutation_rate > 0.0 ? "(固定)" : "(自适应1/L)")
                   << " | 精英保留=" << (config->elitism ? "是" : "否")
                   << " | w范围=[" << config->min_w << "," << config->max_w << "]" << std::endl;
         std::cout << "        提前停止=" << (config->early_stop ? "是" : "否")
@@ -914,9 +919,14 @@ private:
     }
 
     void mutate(std::vector<std::vector<double>>& offspring) {
+        if (offspring.empty() || offspring[0].empty()) return;
+        double mutationRate =
+            config->mutation_rate > 0.0
+                ? config->mutation_rate
+                : 1.0 / static_cast<double>(offspring[0].size());
         for (size_t i = 0; i < offspring.size(); i++) {
             for (size_t j = 0; j < offspring[i].size(); j++) {
-                if (rng.uniform() < config->mutation_rate) {
+                if (rng.uniform() < mutationRate) {
                     offspring[i][j] = 1.0 - offspring[i][j];
                 }
             }

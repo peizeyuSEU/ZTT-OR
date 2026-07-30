@@ -13,7 +13,7 @@ num_retailers: 30
 population_size: 30               # 种群大小
 max_generation: 50                # 最大迭代次数
 crossover_rate: 0.7               # 交叉概率
-mutation_rate: 0.2                # 变异概率
+mutation_rate: -1                 # <=0：逐位变异率自适应为1/染色体总长度
 elitism: true                     # 精英保留
 chromosome_length: 10             # w_j编码位数（10位=3位小数）
 min_w: 0.0                        # 减排率下限
@@ -68,6 +68,8 @@ use_dfs: true
 
 # ===== 公式模型选择 =====
 use_sqrt_investment: true         # true=½δw²√D（论文标准版）
+# 投资成本处理模式：false=事后扣除(旧), true=列内扣除(新,√D模型正确)
+use_invest_in_column: true
 
 # ===== 定价子问题算法选择 =====
 # pricing_algorithm: 0=Simplified(简化枚举,当前基线) / 1=Algorithm3(论文精确) / 2=ConvexHull(凸包剪枝,优化4)

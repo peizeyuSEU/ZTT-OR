@@ -1,0 +1,27 @@
+﻿plan_name: "seed32503_40x150_w05_k3_dfs_180s"
+plan_desc: "Out-of-sample high-w test with Top-3 pricing and adaptive nodes."
+num_dc: 40
+num_retailers: 150
+random_seed: 32503
+run_mode: fixed_w
+use_sqrt_investment: true
+use_invest_in_column: true
+pricing_max_cols_per_dc: 3
+pricing_adaptive_cols: false
+max_cg_iterations: 1000
+cg_early_stop: false
+max_branch_nodes: 10000
+bb_node_strategy: dfs
+bb_hybrid_switch_gap: 0.01
+bb_adaptive_stagnation_nodes: 12
+bb_adaptive_cooldown_nodes: 12
+bp_time_limit_sec: 180
+bp_relative_gap: 0
+parallel_fitness: false
+parallel_pricing: false
+cplex_threads: 1
+experiments:
+  - name: "seed32503_w05_k3_dfs_180s"
+    fixed_w: [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+
+

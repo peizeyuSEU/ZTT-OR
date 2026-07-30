@@ -1,0 +1,26 @@
+plan_name: "hetero_seed32501_global_k3_rmip_dfs_120s"
+plan_desc: "Fresh heterogeneous-w test of a 5-second root restricted-MIP incumbent."
+num_dc: 40
+num_retailers: 150
+random_seed: 32501
+run_mode: fixed_w
+use_sqrt_investment: true
+use_invest_in_column: true
+pricing_max_cols_per_dc: 3
+pricing_adaptive_cols: false
+pricing_per_dc_by_w: false
+root_heuristic: true
+root_rmp_mip_heuristic: true
+root_rmp_mip_time_limit_sec: 5
+max_cg_iterations: 1000
+cg_early_stop: false
+max_branch_nodes: 10000
+bb_node_strategy: dfs
+bp_time_limit_sec: 120
+bp_relative_gap: 0
+parallel_fitness: false
+parallel_pricing: false
+cplex_threads: 1
+experiments:
+  - name: "hetero_seed32501_30x02_10x08_global_k3_rmip_120s"
+    fixed_w: [0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]

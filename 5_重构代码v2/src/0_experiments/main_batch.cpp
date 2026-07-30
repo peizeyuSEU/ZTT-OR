@@ -29,7 +29,9 @@ int main(int argc, char** argv) {
     }
 
     // 2. 创建实验输出目录
-    std::string expDir = OutputManager::createExperimentDir(plan.planName());
+    const std::string outputPlanName =
+        plan.planName().empty() ? planName : plan.planName();
+    std::string expDir = OutputManager::createExperimentDir(outputPlanName);
     std::cout << "实验结果目录: " << expDir << std::endl;
 
     // 3. 保存本次实验的方案配置
@@ -103,14 +105,33 @@ int main(int argc, char** argv) {
             f << "supplier_y: " << cfg.supplier_y << "\n";
             // 公式模型与定价算法（核心：确保用选定的方案0）
             f << "use_sqrt_investment: " << (cfg.use_sqrt_investment ? "true" : "false") << "\n";
+            f << "use_invest_in_column: " << (cfg.use_invest_in_column ? "true" : "false") << "\n";
             f << "pricing_algorithm: " << cfg.pricing_algorithm << "\n";
             f << "pricing_max_cols_per_dc: " << cfg.pricing_max_cols_per_dc << "\n";
+            f << "pricing_adaptive_cols: " << (cfg.pricing_adaptive_cols ? "true" : "false") << "\n";
+            f << "pricing_adaptive_stall_iterations: " << cfg.pricing_adaptive_stall_iterations << "\n";
+            f << "pricing_adaptive_max_cols: " << cfg.pricing_adaptive_max_cols << "\n";
+            f << "pricing_per_dc_by_w: " << (cfg.pricing_per_dc_by_w ? "true" : "false") << "\n";
+            f << "pricing_high_w_threshold: " << cfg.pricing_high_w_threshold << "\n";
+            f << "pricing_high_w_max_cols: " << cfg.pricing_high_w_max_cols << "\n";
             // 早停与并行参数（保证批量与单跑性能一致）
             f << "early_stop: " << (cfg.early_stop ? "true" : "false") << "\n";
             f << "convergence_generations: " << cfg.convergence_generations << "\n";
             f << "convergence_tolerance: " << cfg.convergence_tolerance << "\n";
             f << "max_cg_iterations: " << cfg.max_cg_iterations << "\n";
             f << "max_branch_nodes: " << cfg.max_branch_nodes << "\n";
+            f << "bb_node_strategy: " << cfg.bb_node_strategy << "\n";
+            f << "bb_hybrid_switch_gap: " << cfg.bb_hybrid_switch_gap << "\n";
+            f << "bb_hybrid_dfs_quota: " << cfg.bb_hybrid_dfs_quota << "\n";
+            f << "bb_adaptive_stagnation_nodes: " << cfg.bb_adaptive_stagnation_nodes << "\n";
+            f << "bb_adaptive_cooldown_nodes: " << cfg.bb_adaptive_cooldown_nodes << "\n";
+            f << "bp_time_limit_sec: " << cfg.bp_time_limit_sec << "\n";
+            f << "bp_relative_gap: " << cfg.bp_relative_gap << "\n";
+            f << "root_heuristic: " << (cfg.root_heuristic ? "true" : "false") << "\n";
+            f << "root_rmp_mip_heuristic: "
+              << (cfg.root_rmp_mip_heuristic ? "true" : "false") << "\n";
+            f << "root_rmp_mip_time_limit_sec: "
+              << cfg.root_rmp_mip_time_limit_sec << "\n";
             f << "cg_early_stop: " << (cfg.cg_early_stop ? "true" : "false") << "\n";
             f << "cg_stall_iterations: " << cfg.cg_stall_iterations << "\n";
             f << "cg_stall_tolerance: " << cfg.cg_stall_tolerance << "\n";

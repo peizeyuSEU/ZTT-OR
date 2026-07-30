@@ -1,0 +1,16 @@
+# 回归测试：强制CG在1轮后退出，验证未认证LP不会冒充整数解。
+num_dc: 3
+num_retailers: 10
+random_seed: 32501
+run_mode: fixed_w
+fixed_w: [0.2, 0.4, 0.6]
+max_cg_iterations: 1
+max_branch_nodes: 100
+bp_time_limit_sec: 30
+bp_relative_gap: 0
+cg_early_stop: false
+use_sqrt_investment: true
+use_invest_in_column: true
+parallel_fitness: false
+parallel_pricing: false
+cplex_threads: 1

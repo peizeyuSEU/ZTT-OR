@@ -1,0 +1,23 @@
+plan_name: "compare_40x150_w00_k1_branchfix"
+plan_desc: "Fresh 600-second K=1 run after exact retailer-branch pricing fix."
+
+num_dc: 40
+num_retailers: 150
+random_seed: 32501
+run_mode: fixed_w
+
+use_sqrt_investment: true
+use_invest_in_column: true
+pricing_max_cols_per_dc: 1
+max_cg_iterations: 1000
+cg_early_stop: false
+max_branch_nodes: 10000
+bp_time_limit_sec: 600
+bp_relative_gap: 0
+parallel_fitness: false
+parallel_pricing: false
+cplex_threads: 1
+
+experiments:
+  - name: "compare_40x150_w00_k1_branchfix"
+    fixed_w: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

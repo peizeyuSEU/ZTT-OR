@@ -84,6 +84,10 @@ private:
     static const int kMaxCachedCols = 5;
     std::vector<std::vector<CachedColumn>> cachedBestCols;  // 每个DC一个多列列表
     int pricingIterCounter = 0;                             // 全局迭代计数器
+    // solveMulti() 请求一次完整定价时，solve() 在同一轮价格扫描中顺带收集
+    // 当前对偶下的 Top-K 唯一正列。每个 PricingSolver 仅由其对应 DC 的线程访问。
+    int requestedFreshCols_ = 1;
+    std::vector<PricingResult> lastFreshCandidates_;
 
 public:
     PricingSolver() : inst(nullptr), config(nullptr), logger(nullptr),
@@ -125,12 +129,33 @@ public:
         PricingResult result(inst->numRetailer);
         result.dcIndex = j;
         result.reducedCost = -DBL_MAX;
+        lastFreshCandidates_.clear();
+        auto collectFresh = [&](const PricingResult& candidate) {
+            if (requestedFreshCols_ <= 1 || candidate.reducedCost <= rc_eps) return;
+            // RMP 按服务集合 S 去重；同一 S 只保留当前对偶下 RC 更高的价格。
+            for (auto& existing : lastFreshCandidates_) {
+                if (existing.optimal_S == candidate.optimal_S) {
+                    if (candidate.reducedCost > existing.reducedCost) {
+                        existing = candidate;
+                    }
+                    return;
+                }
+            }
+            lastFreshCandidates_.push_back(candidate);
+            if ((int)lastFreshCandidates_.size() > requestedFreshCols_) {
+                auto worst = std::min_element(
+                    lastFreshCandidates_.begin(), lastFreshCandidates_.end(),
+                    [](const PricingResult& a, const PricingResult& b) {
+                        return a.reducedCost < b.reducedCost;
+                    });
+                lastFreshCandidates_.erase(worst);
+            }
+        };
 
-        // ===== 快路径：遍历该DC缓存的多列，取当前dual下RC最大且>阈值者直接返回 =====
+        // ===== 无损缓存：取当前 dual 下最好的缓存列作为 incumbent，再执行完整定价 =====
         // 分支约束下：缓存列必须仍满足约束，否则不能复用。
-        bool cacheHit = false;
         if (j < (int)cachedBestCols.size() && !cachedBestCols[j].empty()) {
-            ObjectiveFormula objFormula;
+            ObjectiveFormula objFormula(*config);
             double bestRc = rc_eps;   // 只接受严格大于阈值的列
             int bestPos = -1;
             for (int c = 0; c < (int)cachedBestCols[j].size(); c++) {
@@ -151,20 +176,23 @@ public:
                 }
             }
             if (bestPos >= 0) {
-                // 命中：复用该缓存列，跳过整段凸包枚举
+                // 命中：用该缓存列抬高 incumbent，帮助后续上界剪枝；不能跳过完整定价
                 auto& hit = cachedBestCols[j][bestPos];
                 result.reducedCost = bestRc;
                 result.optimal_pj = hit.p_j;
                 result.optimal_S = hit.S;
                 result.dcIndex = j;
-                cacheHit = true;
                 // 更新命中列的检验数与迭代号（用于LRU）
                 hit.reducedCost = bestRc;
                 hit.iteration = pricingIterCounter;
             }
         }
 
-        if (!cacheHit) {
+        {
+            // A cache hit is only an incumbent for exact pricing, not a proof that
+            // the cached column maximizes reduced cost under the current duals.
+            // Always run the complete pricing search below.  The incumbent still
+            // accelerates the lossless upper-bound pruning through result.reducedCost.
             // 候选价格为各零售商的保留价
             std::vector<double> candidate_prices;
             for (int i = 0; i < inst->numRetailer; i++) {
@@ -210,8 +238,8 @@ public:
                           });
                 for (const auto& pr : priced) {
                     if (pr.first <= result.reducedCost) {
-                        // 上界降序遍历：当前价上界已不优，则后续价上界更低，
-                        // 全部不可能更优，直接终止（早停）。
+                        // 单列模式仍按 incumbent 剪枝；多列模式仅当后续价格
+                        // 不可能进入当前 Top-K 正列时退出。
                         break;
                     }
                     double price = pr.second;
@@ -221,6 +249,7 @@ public:
                     } else {
                         subResult = solveForPrice_Simplified(j, price, dual, branch, &featBase);
                     }
+                    collectFresh(subResult);
                     if (subResult.reducedCost > result.reducedCost) {
                         result = subResult;
                     }
@@ -229,11 +258,13 @@ public:
                 for (double price : candidate_prices) {
                     PricingResult subResult =
                         solveForPrice_Algorithm3(j, price, dual, branch);
+                    collectFresh(subResult);
                     if (subResult.reducedCost > result.reducedCost) {
                         result = subResult;
                     }
                 }
             }
+            collectFresh(result);
 
             // 如果找到了正检验数列，加入多列缓存（去重 + LRU 淘汰）
             if (result.reducedCost > rc_eps && j < (int)cachedBestCols.size()) {
@@ -279,9 +310,8 @@ public:
     /**
      * 求解DC j的定价子问题，返回多个正检验数列（multi-column pricing）。
      *
-     * 先调用 solve() 得到当前对偶下的最优列（与单列行为完全一致，保证解质量不变），
-     * 再从该 DC 的缓存池中额外挑出其它正检验数列一起返回，一次性向 RMP 注入更多列，
-     * 从而压缩大规模列生成的迭代轮数。返回的所有列都是当前对偶下 RC > rc_eps 的合法列。
+     * solve() 仍执行完整定价并返回全局最优列；与此同时，在同一次候选价格扫描中
+     * 收集当前对偶下的 Top-K 唯一正列。附加列不再依赖历史缓存。
      *
      * @param j DC索引
      * @param dual 对偶变量数组
@@ -293,44 +323,23 @@ public:
                                           int maxCols,
                                           const BranchState* branch = nullptr) {
         std::vector<PricingResult> out;
+        requestedFreshCols_ = std::max(1, maxCols);
         PricingResult best = solve(j, dual, branch);
+        requestedFreshCols_ = 1;
         if (best.reducedCost <= rc_eps) {
             return out;  // 无正检验数列，直接返回空
         }
         out.push_back(best);
-        if (maxCols <= 1 || j >= (int)cachedBestCols.size()) {
-            return out;  // 单列模式或无缓存池，退化为单列
+        if (maxCols <= 1) {
+            return out;
         }
 
-        // 从缓存池中额外挑出当前对偶下的其它正 RC 列（排除已返回的最优列）。
-        ObjectiveFormula objFormula;
+        // 使用刚才完整价格扫描得到的新鲜候选；按 S 去重，best 始终置于首位。
         std::vector<PricingResult> extras;
-        for (const auto& cached : cachedBestCols[j]) {
-            // 跳过与最优列相同的列（相同 S 且相同 p_j）
-      if (cached.p_j == best.optimal_pj && cached.S == best.optimal_S) {
-                continue;
-            }
-            if (branch != nullptr && !branch->isColumnFeasible(j, cached.S)) {
-                continue;  // 分支约束下不可行
-            }
-            // 用当前对偶重新计算该缓存列的真实检验数
-            double profit = objFormula.columnProfit(*inst, j, cached.S, cached.p_j,
-                (j < (int)inst->w.size()) ? inst->w[j] : 0.0);
-            double rc = profit;
-            for (int i = 0; i < inst->numRetailer; i++) {
-                if (cached.S[i] == 1) rc -= dual[i];
-            }
-            rc -= dual[inst->numRetailer + j];
-            if (rc > rc_eps) {
-                PricingResult pr(inst->numRetailer);
-                pr.dcIndex = j;
-                pr.reducedCost = rc;
-                pr.optimal_pj = cached.p_j;
-                pr.optimal_S = cached.S;
-              extras.push_back(std::move(pr));
-            }
+        for (const auto& candidate : lastFreshCandidates_) {
+            if (candidate.optimal_S == best.optimal_S) continue;
+            if (candidate.reducedCost > rc_eps) extras.push_back(candidate);
         }
-        // 按 RC 降序取前 (maxCols-1) 个附赠列
         std::sort(extras.begin(), extras.end(),
                   [](const PricingResult& a, const PricingResult& b) {
                       return a.reducedCost > b.reducedCost;
@@ -433,7 +442,11 @@ private:
         double inv_factor = InventoryCostFormula::inventoryCostFactor(
             inst->h, inst->p, inst->hat_h, w_j);
         double eoq_part = std::sqrt(2.0 * (inst->F[j] + inst->g[j]) * inv_factor * totalDemand);
-        double invest_part = 0.5 * inst->delta * w_j * w_j * std::sqrt(totalDemand);
+        double invest_part = 0.0;
+        if (config && config->use_invest_in_column) {
+            invest_part = InvestmentCostFormula::compute(
+                *inst, j, w_j, totalDemand, config->use_sqrt_investment);
+        }
         return eoq_part + invest_part;
     }
 
@@ -457,7 +470,7 @@ private:
     double computeReducedCost(const std::vector<int>& S, int j,
                                double p_j, double w_j,
                                const std::vector<double>& dual) const {
-        ObjectiveFormula objFormula;
+        ObjectiveFormula objFormula(*config);
         double profit = objFormula.columnProfit(*inst, j, S, p_j, w_j);
         double rc = profit;
         for (int i = 0; i < inst->numRetailer; i++) {
@@ -494,7 +507,7 @@ private:
         // 空集列利润（S 全 0）：收入=0，仅含固定成本与运输/库存的常数部分。
         // columnProfit 对空集返回 -facilityCost（运输/库存对空集为 0）。
         std::vector<int> emptyS(inst->numRetailer, 0);
-        ObjectiveFormula objFormula;
+        ObjectiveFormula objFormula(*config);
         double emptyProfit = objFormula.columnProfit(*inst, j, emptyS, p_j, w_j);
         double upper = emptyProfit - dual[inst->numRetailer + j];
 
@@ -546,6 +559,18 @@ private:
         auto features = base ? computeFeatures(j, p_j, dual, *base)
                              : computeFeatures(j, p_j, dual);
 
+        // Embed retailer branching directly in the pricing problem.
+        // -1 = free, 0 = forbidden, 1 = required.
+        std::vector<int> fixedValue(inst->numRetailer, -1);
+        if (branch) {
+            for (const auto& rb : branch->retailerBranches) {
+                if (rb.dcIndex == j && rb.retailerIndex >= 0
+                    && rb.retailerIndex < inst->numRetailer) {
+                    fixedValue[rb.retailerIndex] = rb.value;
+                }
+            }
+        }
+
         // 收集 Ai < 0 的零售商，同时预计算每个候选零售商对列利润的
         // 【线性单位贡献】，供后续增量式检验数计算复用（优化 D）。
         //   locRevenue_t = r_i(p_j)·μ_i                       —— 收入线性项
@@ -567,12 +592,31 @@ private:
         locVar.reserve(inst->numRetailer);
         locDual.reserve(inst->numRetailer);
 
+        double forcedRevenue = 0.0;
+        double forcedTransport = 0.0;
+        double forcedMu = 0.0;
+        double forcedVar = 0.0;
+        double forcedDual = 0.0;
+
         double trans_cost_sup_dc = TransportCostFormula::costSupplierToDC(inst->a_dist[j]);
         double carbon_factor = inst->p * (1.0 - w_j);
         double carbon_sup_dc = inst->b[j];  // b̂_j
 
         for (int i = 0; i < inst->numRetailer; i++) {
-            if (features[i].Ai < 0) {
+            if (fixedValue[i] == 1) {
+                double mu_i = inst->mu[i];
+                double rev = ((p_j <= inst->reservePrice[i]) ? p_j : 0.0) * mu_i;
+                double trans_lin = (trans_cost_sup_dc
+                                    + TransportCostFormula::costDCToRetailer(inst->dist[i][j]))
+                                   * mu_i;
+                double trans_carbon =
+                    carbon_factor * (carbon_sup_dc + inst->bb[i][j]) * mu_i;
+                forcedRevenue += rev;
+                forcedTransport += trans_lin + trans_carbon;
+                forcedMu += mu_i;
+                forcedVar += inst->variance[i];
+                forcedDual += dual[i];
+            } else if (fixedValue[i] != 0 && features[i].Ai < 0) {
                 negative_idx.push_back(i);
                 xi[i] = -static_cast<double>(features[i].mu) / features[i].Ai;
                 yi[i] = -features[i].variance / features[i].Ai;
@@ -673,7 +717,11 @@ private:
             if (!seen.insert(mask).second) continue;
 
             // 增量聚合选中位的线性量与需求/方差
-            double sumRev = 0.0, sumTrans = 0.0, sumMu = 0.0, sumVar = 0.0, sumDual = 0.0;
+            double sumRev = forcedRevenue;
+            double sumTrans = forcedTransport;
+            double sumMu = forcedMu;
+            double sumVar = forcedVar;
+            double sumDual = forcedDual;
             for (int t = 0; t < n_neg; t++) {
                 if (mask[t / kBits] & (1ULL << (t % kBits))) {
                     sumRev += locRevenue[t];
@@ -693,14 +741,26 @@ private:
                                     inv_factor, inst->z_alpha, inst->L[j], sumVar);
             }
 
+            // 新逻辑：减排投资成本 ½δw²√D（与 EOQ 同构的 √D 非线性项）
+            // 仅当 use_invest_in_column=true 时纳入（此时必然用 sqrtDemandModel，
+            // 因为 quadraticOnlyModel 不依赖S，无需在列利润中处理）。
+            double investCost = 0.0;
+            if (config->use_invest_in_column && sumMu > 0.0) {
+                investCost = InvestmentCostFormula::compute(
+                    *inst, j, w_j, sumMu, config->use_sqrt_investment);
+            }
+
             // RC = columnProfit - Σλ_i - λ_DC
-            //    = (sumRev - facilityCost - sumTrans - inventoryCost) - sumDual - dualDC
-            double rc = constRC + sumRev - sumTrans - inventoryCost - sumDual;
+            //    = (sumRev - facilityCost - sumTrans - inventoryCost - investCost) - sumDual - dualDC
+            double rc = constRC + sumRev - sumTrans - inventoryCost - investCost - sumDual;
 
             if (rc <= result.reducedCost) continue;  // 不优则无需展开/过滤
 
             // 展开为全 R 维（供分支约束与结果输出）
             std::fill(Sfull.begin(), Sfull.end(), 0);
+            for (int i = 0; i < inst->numRetailer; i++) {
+                if (fixedValue[i] == 1) Sfull[i] = 1;
+            }
             for (int t = 0; t < n_neg; t++) {
                 if (mask[t / kBits] & (1ULL << (t % kBits))) {
                     Sfull[negative_idx[t]] = 1;

@@ -82,6 +82,10 @@ struct ExperimentResult {
     double solveTime = 0.0;
     int numDCsOpen = 0;
     int numRtsServed = 0;
+    SolveStatus solveStatus = SolveStatus::NOT_STARTED;
+    double bestBound = DBL_MAX;
+    double relativeGap = DBL_MAX;
+    bool hasIntegerSolution = false;
 
     // 算法统计
     int totalBranchNodes = 0;

@@ -6,6 +6,35 @@
 #include <limits>
 #include <cfloat>
 
+enum class SolveStatus {
+    NOT_STARTED,
+    OPTIMAL,
+    FEASIBLE_NOT_PROVEN,
+    INFEASIBLE,
+    NO_INTEGER_SOLUTION,
+    TIME_LIMIT,
+    NODE_LIMIT,
+    GAP_LIMIT,
+    CG_ITERATION_LIMIT,
+    ERROR
+};
+
+inline const char* solveStatusName(SolveStatus status) {
+    switch (status) {
+        case SolveStatus::NOT_STARTED: return "NOT_STARTED";
+        case SolveStatus::OPTIMAL: return "OPTIMAL";
+        case SolveStatus::FEASIBLE_NOT_PROVEN: return "FEASIBLE_NOT_PROVEN";
+        case SolveStatus::INFEASIBLE: return "INFEASIBLE";
+        case SolveStatus::NO_INTEGER_SOLUTION: return "NO_INTEGER_SOLUTION";
+        case SolveStatus::TIME_LIMIT: return "TIME_LIMIT";
+        case SolveStatus::NODE_LIMIT: return "NODE_LIMIT";
+        case SolveStatus::GAP_LIMIT: return "GAP_LIMIT";
+        case SolveStatus::CG_ITERATION_LIMIT: return "CG_ITERATION_LIMIT";
+        case SolveStatus::ERROR: return "ERROR";
+    }
+    return "ERROR";
+}
+
 struct PricingResult {
     double reducedCost = -DBL_MAX;
     std::vector<int> optimal_S;
@@ -19,6 +48,8 @@ struct CGResult {
     double lpObjective = 0.0;
     bool isInteger = false;
     bool feasible = true;
+    bool certifiedOptimal = false;
+    bool iterationLimitReached = false;
     std::vector<std::vector<double>> final_z_j;
     std::vector<std::vector<std::vector<int>>> j_S;
     std::vector<std::vector<double>> p_j;
@@ -89,6 +120,10 @@ struct Solution {
     int numDCsOpen = 0;
     int numRtsServed = 0;
     std::vector<double> w;
+    SolveStatus solveStatus = SolveStatus::NOT_STARTED;
+    double bestBound = DBL_MAX;
+    double relativeGap = DBL_MAX;
+    bool hasIntegerSolution = false;
     Solution() = default;
 };
 

@@ -48,7 +48,9 @@ public:
     int population_size = 30;
     int max_generation = 50;
     double crossover_rate = 0.7;
-    double mutation_rate = 0.2;
+    // <= 0 时按染色体总长度自适应：p_m = 1 / (num_dc * chromosome_length)
+    // > 0 时使用指定的逐位变异概率，便于复现历史参数（如0.2）
+    double mutation_rate = -1.0;
     bool elitism = true;
     int chromosome_length = 10;
     double min_w = 0.0;
@@ -99,6 +101,13 @@ public:
     int max_branch_nodes = 10000;
     int max_cg_iterations = 2000;  // 列生成单次求解的最大迭代次数（防数值抖动死循环）
     bool use_dfs = true;
+    std::string bb_node_strategy = "dfs"; // dfs | best_bound | hybrid | adaptive
+    double bb_hybrid_switch_gap = 0.01;   // hybrid switches only after incumbent gap <= threshold
+    int bb_hybrid_dfs_quota = 3;          // after threshold: N DFS selections, then one best-bound
+    int bb_adaptive_stagnation_nodes = 12; // best-bound restart after N selections without LB improvement
+    int bb_adaptive_cooldown_nodes = 12;   // minimum selections between best-bound restarts
+    double bp_time_limit_sec = 600.0; // <=0 表示不设时间限制
+    double bp_relative_gap = 0.0;     // 精确认证默认0；>0时达到阈值返回GAP_LIMIT
 
     // ========== 列生成 tailing-off 早停参数 ==========
     // 列生成尾部常出现"每轮只加微小改善列"的拖尾现象（tailing-off）。
@@ -126,9 +135,19 @@ public:
     // 根节点 LP 分数解后，用 rounding/贪心构造一个可行整数解作为初始下界，
     // 使分支定界的剪枝尽早生效。只抬下界，不影响最终全局最优性。
     bool root_heuristic = true;           // 是否启用根节点整数启发式
+    bool root_rmp_mip_heuristic = false;  // 在根节点已生成列上短时求解0-1 RMP，仅用于改进下界
+    double root_rmp_mip_time_limit_sec = 5.0;
 
     // ========== 公式模型选择 ==========
     bool use_sqrt_investment = true;     // true=½δw²√D, false=½βw²（论文标准版）
+
+    // ========== 投资成本处理模式 ==========
+    // false（仅用于历史结果回归）：投资成本不在列利润中，事后在 BranchAndPrice::solve() 统一扣除。
+    //   仅对 quadraticOnlyModel(½βw², 不依赖S) 是安全的。
+    // true（新逻辑）：投资成本纳入列利润 columnProfit()，定价子问题 RC 同步含投资成本。
+    //   对 sqrtDemandModel(½δw²√D, 依赖S) 是正确的处理方式，因为 √D 依赖服务集合S，
+    //   事后扣除无法正确计算每个DC对应的 D_j 值。
+    bool use_invest_in_column = true;
 
     // ========== 定价子问题算法选择 ==========
     bool use_paper_algorithm3 = false;   // true=论文Algorithm3（完整凸包+余弦相似度）
@@ -143,6 +162,12 @@ public:
     // 设为 >1 时，每个 DC 每轮额外返回缓存池中当前对偶下的多个正检验数列，
     // 一次性向 RMP 注入更多列以压缩大规模列生成的迭代轮数（解不变，仅减轮数）。
     int pricing_max_cols_per_dc = 1;
+    bool pricing_adaptive_cols = false;
+    int pricing_adaptive_stall_iterations = 5;
+    int pricing_adaptive_max_cols = 3;
+    bool pricing_per_dc_by_w = false;
+    double pricing_high_w_threshold = 0.35;
+    int pricing_high_w_max_cols = 3;
 
     // ========== 并行计算参数 ==========
     bool parallel_fitness = false;        // 是否并行评估GA个体
@@ -454,7 +479,9 @@ private:
     void setField(const std::string& key, const std::string& raw_value) {
         // 去除行内注释
         std::string value = stripInlineComment(raw_value);
-        if (key == "num_dc") num_dc = std::stoi(value);
+        if (key == "plan_name") plan_name = removeQuotes(value);
+        else if (key == "plan_desc") plan_desc = removeQuotes(value);
+        else if (key == "num_dc") num_dc = std::stoi(value);
         else if (key == "num_retailers") num_retailers = std::stoi(value);
         else if (key == "population_size") population_size = std::stoi(value);
         else if (key == "max_generation") max_generation = std::stoi(value);
@@ -494,14 +521,24 @@ private:
         else if (key == "log_file") log_file = value;
         else if (key == "rc_eps") rc_eps = std::stod(value);
         else if (key == "max_branch_nodes") max_branch_nodes = std::stoi(value);
-     else if (key == "max_cg_iterations") max_cg_iterations = std::stoi(value);
+        else if (key == "max_cg_iterations") max_cg_iterations = std::stoi(value);
+        else if (key == "bp_time_limit_sec") bp_time_limit_sec = std::stod(value);
+        else if (key == "bp_relative_gap") bp_relative_gap = std::stod(value);
         else if (key == "cg_early_stop") cg_early_stop = toBool(value);
         else if (key == "cg_stall_iterations") cg_stall_iterations = std::stoi(value);
         else if (key == "cg_stall_tolerance") cg_stall_tolerance = std::stod(value);
         else if (key == "dual_smooth_alpha") dual_smooth_alpha = std::stod(value);
         else if (key == "root_heuristic") root_heuristic = toBool(value);
+        else if (key == "root_rmp_mip_heuristic") root_rmp_mip_heuristic = toBool(value);
+        else if (key == "root_rmp_mip_time_limit_sec") root_rmp_mip_time_limit_sec = std::stod(value);
         else if (key == "use_dfs") use_dfs = toBool(value);
+        else if (key == "bb_node_strategy") bb_node_strategy = value;
+        else if (key == "bb_hybrid_switch_gap") bb_hybrid_switch_gap = std::stod(value);
+        else if (key == "bb_hybrid_dfs_quota") bb_hybrid_dfs_quota = std::stoi(value);
+        else if (key == "bb_adaptive_stagnation_nodes") bb_adaptive_stagnation_nodes = std::stoi(value);
+        else if (key == "bb_adaptive_cooldown_nodes") bb_adaptive_cooldown_nodes = std::stoi(value);
         else if (key == "use_sqrt_investment") use_sqrt_investment = toBool(value);
+        else if (key == "use_invest_in_column") use_invest_in_column = toBool(value);
         else if (key == "use_paper_algorithm3") {
             use_paper_algorithm3 = toBool(value);
             // 向后兼容：旧配置只设 use_paper_algorithm3 时，同步映射到 pricing_algorithm
@@ -513,6 +550,12 @@ private:
             use_paper_algorithm3 = (pricing_algorithm == 1);
         }
         else if (key == "pricing_max_cols_per_dc") pricing_max_cols_per_dc = std::stoi(value);
+        else if (key == "pricing_adaptive_cols") pricing_adaptive_cols = toBool(value);
+        else if (key == "pricing_adaptive_stall_iterations") pricing_adaptive_stall_iterations = std::stoi(value);
+        else if (key == "pricing_adaptive_max_cols") pricing_adaptive_max_cols = std::stoi(value);
+        else if (key == "pricing_per_dc_by_w") pricing_per_dc_by_w = toBool(value);
+        else if (key == "pricing_high_w_threshold") pricing_high_w_threshold = std::stod(value);
+        else if (key == "pricing_high_w_max_cols") pricing_high_w_max_cols = std::stoi(value);
         else if (key == "parallel_fitness") parallel_fitness = toBool(value);
         else if (key == "num_threads") num_threads = std::stoi(value);
         else if (key == "parallel_pricing") parallel_pricing = toBool(value);

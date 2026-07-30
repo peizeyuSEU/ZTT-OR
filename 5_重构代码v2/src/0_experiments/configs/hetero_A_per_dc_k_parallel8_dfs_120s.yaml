@@ -1,0 +1,30 @@
+plan_name: "hetero_A_per_dc_k_parallel8_dfs_120s"
+plan_desc: "Fresh heterogeneous A test with lossless 8-thread DC-parallel pricing."
+num_dc: 40
+num_retailers: 150
+random_seed: 32501
+run_mode: fixed_w
+use_sqrt_investment: true
+use_invest_in_column: true
+pricing_max_cols_per_dc: 1
+pricing_adaptive_cols: false
+pricing_per_dc_by_w: true
+pricing_high_w_threshold: 0.35
+pricing_high_w_max_cols: 3
+root_heuristic: true
+root_rmp_mip_heuristic: true
+root_rmp_mip_time_limit_sec: 5
+max_cg_iterations: 1000
+cg_early_stop: false
+max_branch_nodes: 10000
+bb_node_strategy: dfs
+bp_time_limit_sec: 120
+bp_relative_gap: 0
+parallel_fitness: false
+parallel_pricing: true
+pricing_threads: 8
+core_budget: 8
+cplex_threads: 1
+experiments:
+  - name: "hetero_seed32501_half_00_half_08_per_dc_k_parallel8_120s"
+    fixed_w: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]

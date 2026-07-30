@@ -101,10 +101,12 @@ public:
     /**
      * 4. 净碳交易成本
      *    如果有盈余（e⁻ > 0），则为负值（收入）
+     *    p̂(e⁺ - e⁻) = p̂(E - C)
      */
     static double computeNetCarbonCost(double p_hat, double E, double C) {
         double e_plus = computeEPositive(E, C);
-        return p_hat * e_plus;
+        double e_minus = computeENegative(E, C);
+        return p_hat * (e_plus - e_minus);
     }
 };
 

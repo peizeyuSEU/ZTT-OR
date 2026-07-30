@@ -31,12 +31,14 @@ EXPERIMENT_OBJ = $(EXPERIMENT_SRC:.cpp=.o)
 
 TARGET = ../bin/ga_bp
 EXPERIMENT_TARGET = ../bin/batch
+INVESTMENT_TEST_SRC = 99_test/test_investment_objective.cpp
+INVESTMENT_TEST_TARGET = ../bin/test_investment_objective
 
 # 默认运行配置（make run 使用），可用命令行覆盖：make run CONFIG=xxx.yaml
 CONFIG = 1_launcher/configs/delta3000.yaml
 
 # 默认目标
-.PHONY: all clean run experiments all-bins
+.PHONY: all clean run experiments all-bins test-investment
 
 all: $(TARGET)
 
@@ -44,6 +46,13 @@ experiments: $(EXPERIMENT_TARGET)
 
 # 一次性编译两个产物：单跑 ga_bp + 批量 batch
 all-bins: $(TARGET) $(EXPERIMENT_TARGET)
+
+test-investment: $(INVESTMENT_TEST_TARGET)
+	$(INVESTMENT_TEST_TARGET)
+
+$(INVESTMENT_TEST_TARGET): $(INVESTMENT_TEST_SRC)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -o $@ $<
 
 # 编译并运行（默认配置 delta3000.yaml；产物在 v2/bin，日志固定在 v2/results/single）
 run: $(TARGET)
@@ -67,3 +76,4 @@ $(EXPERIMENT_TARGET): $(EXPERIMENT_OBJ)
 clean:
 	rm -f $(MAIN_OBJ) $(EXPERIMENT_OBJ)
 	rm -f $(TARGET) $(EXPERIMENT_TARGET)
+	rm -f $(INVESTMENT_TEST_TARGET)

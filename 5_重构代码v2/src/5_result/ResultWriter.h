@@ -63,6 +63,13 @@ public:
         result_.dcSolutions = dcSol;
     }
 
+    void setSolveCertification(const Solution& sol) {
+        result_.solveStatus = sol.solveStatus;
+        result_.bestBound = sol.bestBound;
+        result_.relativeGap = sol.relativeGap;
+        result_.hasIntegerSolution = sol.hasIntegerSolution;
+    }
+
     const ExperimentResult& getResult() const { return result_; }
 
     /** 保存完整决策方案报告 */
@@ -98,7 +105,14 @@ public:
         file << "    种群规模: " << config.population_size << "\n";
         file << "    最大迭代代数: " << config.max_generation << "\n";
         file << "    交叉率: " << config.crossover_rate << "\n";
-        file << "    变异率: " << config.mutation_rate << "\n";
+        double effectiveMutationRate =
+            config.mutation_rate > 0.0
+                ? config.mutation_rate
+                : 1.0 / static_cast<double>(
+                      config.num_dc * config.chromosome_length);
+        file << "    逐位变异率: " << effectiveMutationRate
+             << (config.mutation_rate > 0.0 ? " (固定)\n"
+                                            : " (自适应 1/L)\n");
         file << "    染色体长度: " << config.chromosome_length << "\n";
         file << "    GA早停: " << (config.early_stop ? "启用" : "关闭");
         if (config.early_stop) {
@@ -108,6 +122,7 @@ public:
         file << "\n";
         // 列生成参数
         file << "  [列生成]\n";
+        file << "    BP节点列生成: 严格认证（tailing-off不用于BB节点退出）\n";
         file << "    最大迭代次数: " << config.max_cg_iterations << "\n";
         file << "    reduced cost 阈值: " << config.rc_eps << "\n";
         file << "    tailing-off 早停: "
@@ -132,12 +147,36 @@ public:
                       : "Simplified 简化枚举 (全点对 above/below)";
         file << "    定价算法: " << algo_name << "\n\n";
 
+        file << "求解认证:\n";
+        file << "  状态: " << solveStatusName(result_.solveStatus) << "\n";
+        file << "  存在整数可行解: "
+             << (result_.hasIntegerSolution ? "是" : "否") << "\n";
+        if (result_.hasIntegerSolution) {
+            file << "  最好可行目标值: " << std::fixed << std::setprecision(6)
+                 << result_.totalProfit << "\n";
+        }
+        if (result_.bestBound < DBL_MAX / 2) {
+            file << "  有效上界: " << result_.bestBound << "\n";
+        }
+        if (result_.relativeGap < DBL_MAX / 2) {
+            file << "  相对Gap: " << result_.relativeGap << "\n";
+        }
+        file << "\n";
 
-        file << "最优解汇总:\n";
-        file << "  总利润: " << std::fixed << std::setprecision(2)
-             << result_.totalProfit << "\n";
-        file << "  总碳排放: " << result_.carbonEmission << "\n";
-        file << "  求解时间: " << result_.solveTime << " 秒\n\n";
+        if (result_.hasIntegerSolution) {
+            file << (result_.solveStatus == SolveStatus::OPTIMAL
+                         ? "认证最优解汇总:\n"
+                         : "最好可行解汇总:\n");
+            file << "  总利润: " << std::fixed << std::setprecision(2)
+                 << result_.totalProfit << "\n";
+            file << "  总碳排放: " << result_.carbonEmission << "\n";
+            file << "  求解时间: " << result_.solveTime << " 秒\n\n";
+        } else {
+            file << "求解结果:\n";
+            file << "  未获得整数可行解，不报告利润、碳排放或决策方案。\n";
+            file << "  求解时间: " << std::fixed << std::setprecision(2)
+                 << result_.solveTime << " 秒\n\n";
+        }
 
         file << "网络决策:\n";
         file << "  开设DC数量: " << result_.numDCsOpen << "\n";
@@ -238,6 +277,7 @@ public:
         // 第一行：核心指标
         file << std::left
              << std::setw(16) << "名称"
+             << std::setw(22) << "状态"
              << std::setw(6) << "#DC"
              << std::setw(6) << "#Rts"
              << std::setw(16) << "总利润"
@@ -254,11 +294,12 @@ public:
              << std::setw(10) << "CG时间"
              << std::setw(10) << "PS时间"
              << std::setw(10) << "BB时间" << std::endl;
-        file << std::string(174, '-') << std::endl;
+        file << std::string(196, '-') << std::endl;
 
         for (const auto& r : results) {
             file << std::left << std::fixed << std::setprecision(2);
             file << std::setw(16) << r.experimentName
+                 << std::setw(22) << solveStatusName(r.solveStatus)
                  << std::setw(6) << r.numDC
                  << std::setw(6) << r.numRetailers
                  << std::setw(16) << r.totalProfit

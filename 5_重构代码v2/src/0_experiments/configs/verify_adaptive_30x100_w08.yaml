@@ -1,0 +1,26 @@
+plan_name: "verify_adaptive_30x100_w08"
+plan_desc: "Exact K=1 regression for stagnation-triggered best-bound restarts."
+
+num_dc: 30
+num_retailers: 100
+random_seed: 32501
+run_mode: fixed_w
+use_sqrt_investment: true
+use_invest_in_column: true
+pricing_max_cols_per_dc: 1
+max_cg_iterations: 1000
+cg_early_stop: false
+max_branch_nodes: 10000
+bb_node_strategy: adaptive
+bb_hybrid_switch_gap: 0.01
+bb_adaptive_stagnation_nodes: 12
+bb_adaptive_cooldown_nodes: 12
+bp_time_limit_sec: 600
+bp_relative_gap: 0
+parallel_fitness: false
+parallel_pricing: false
+cplex_threads: 1
+
+experiments:
+  - name: "verify_adaptive_30x100_w08"
+    fixed_w: [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]

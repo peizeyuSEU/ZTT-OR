@@ -123,28 +123,34 @@ private:
         bp.setInstance(*instance_);
         bp.setConfig(config_);
         bp.setLogger(&logger_);
+        bp.setMonitor(&monitor_);
 
         // 求解
         auto start = steady_clock::now();
         double profit = bp.solve(config_.fixed_w, "固定w求解");
         auto end = steady_clock::now();
         double solveTime = duration<double>(end - start).count();
+        monitor_.reportBPTiming(solveTime);
 
         // 收集结果
         Solution sol = bp.getBestSolution();
         sol.totalProfit = profit;
         sol.w = config_.fixed_w;
 
-        // 后处理
-        PostProcessor postProc(*instance_, sol, config_.fixed_w);
-        postProc.compute();
-        double emission = postProc.getCarbonResult().E;
+        double emission = 0.0;
+        std::unique_ptr<PostProcessor> postProc;
+        if (sol.hasIntegerSolution) {
+            postProc.reset(new PostProcessor(
+                *instance_, sol, config_.fixed_w));
+            postProc->compute();
+            emission = postProc->getCarbonResult().E;
+        }
 
         // 输出结果
         outputResults(sol, config_.fixed_w, profit, emission, solveTime, 0);
 
         // 后处理明细（逐 DC 的 w/p/D/Q* + 碳交易 e±）打到终端
-        postProc.print();
+        if (postProc) postProc->print();
 
         // 打印时间分布报告（终端 + run.log 同步）
         emitTimingAndSummary();
@@ -260,6 +266,7 @@ private:
                                    dcOpen, rtServed, monitor_.totalBranchNodes(),
                                    gaGens, instance_->C);
         resultWriter_.setSolution(sol.dcSolutions);
+        resultWriter_.setSolveCertification(sol);
 
         // 保存报告
         std::string reportFile = outputDir_ + "report.txt";
@@ -273,8 +280,17 @@ private:
 
         // 控制台输出摘要
         std::cout << "\n========== 最终结果 ==========" << std::endl;
-        std::cout << "总利润: " << profit << std::endl;
-        std::cout << "碳排放: " << emission << std::endl;
+        std::cout << "求解状态: " << solveStatusName(sol.solveStatus) << std::endl;
+        if (sol.bestBound < DBL_MAX / 2) {
+            std::cout << "有效上界: " << sol.bestBound
+                      << " | 相对Gap: " << sol.relativeGap << std::endl;
+        }
+        if (sol.hasIntegerSolution) {
+            std::cout << "总利润: " << profit << std::endl;
+            std::cout << "碳排放: " << emission << std::endl;
+        } else {
+            std::cout << "未获得整数可行解，未报告利润和决策方案。" << std::endl;
+        }
         std::cout << "求解时间(秒): " << solveTime << std::endl;
         std::cout << "#DCs Open: " << dcOpen << std::endl;
         std::cout << "#Rts Served: " << rtServed << std::endl;

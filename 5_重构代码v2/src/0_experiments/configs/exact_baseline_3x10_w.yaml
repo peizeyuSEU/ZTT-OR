@@ -1,0 +1,37 @@
+plan_name: "exact_baseline_3x10_w"
+plan_desc: "新目标函数与最优性认证下，3x10固定w基线"
+
+num_dc: 3
+num_retailers: 10
+random_seed: 32501
+
+run_mode: fixed_w
+use_sqrt_investment: true
+use_invest_in_column: true
+
+# 固定w模式不运行GA，以下字段仅用于完整记录配置。
+population_size: 1
+max_generation: 1
+mutation_rate: -1
+chromosome_length: 10
+
+# 精确BP：所有节点严格列生成、零gap；多列定价只改变加列批量，不改变终止条件。
+pricing_max_cols_per_dc: 1
+max_cg_iterations: 1000
+cg_early_stop: false
+max_branch_nodes: 10000
+bp_time_limit_sec: 600
+bp_relative_gap: 0
+parallel_fitness: false
+parallel_pricing: false
+cplex_threads: 1
+
+experiments:
+  - name: "exact_3x10_w00"
+    fixed_w: [0.0, 0.0, 0.0]
+  - name: "exact_3x10_w02"
+    fixed_w: [0.2, 0.2, 0.2]
+  - name: "exact_3x10_w05"
+    fixed_w: [0.5, 0.5, 0.5]
+  - name: "exact_3x10_w08"
+    fixed_w: [0.8, 0.8, 0.8]

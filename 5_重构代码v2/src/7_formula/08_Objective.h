@@ -27,9 +27,11 @@
  *          + 碳配额收入（常数项，加在总分上）
  *
  * 注意：
- * - 减排投资成本不包含在列利润中（避免LP松弛中分数解重复扣除），
- *   而是在 BranchAndPrice::solve() 中统一扣除。
- * - 此处同时提供包含和不包含投资成本的两个版本。
+ * - 旧逻辑（use_invest_in_column=false）：投资成本不在列利润中，事后统一扣除。
+ *   仅对 quadraticOnlyModel(½βw², 不依赖S) 安全。
+ * - 新逻辑（use_invest_in_column=true）：投资成本纳入列利润，定价RC同步含投资成本。
+ *   对 sqrtDemandModel(½δw²√D, 依赖S) 是正确处理——√D依赖S，事后扣除无法正确还原D_j。
+ * - 此处同时提供包含和不包含投资成本的两个版本（受开关控制）。
  */
 
 class ObjectiveFormula {
@@ -43,11 +45,12 @@ public:
     void setConfig(const Config& cfg) { config = &cfg; }
 
     /**
-     * 计算DC j的列利润 R̄_{j,S}（不含减排投资成本）
+     * 计算DC j的列利润 R̄_{j,S}
      *
-     * 此版本用于列生成中的RMP，因为投资成本不在列中扣除。
+     * 旧逻辑(use_invest_in_column=false)：不含投资成本，事后统一扣除。
+     * 新逻辑(use_invest_in_column=true)：含投资成本，定价RC同步含投资成本。
      *
-     * R̄_{j,S} = 收入 - 固定成本(含碳) - 运输成本(含碳) - 库存成本(含碳)
+     * R̄_{j,S} = 收入 - 固定成本(含碳) - 运输成本(含碳) - 库存成本(含碳) [- 投资成本]
      */
     double columnProfit(const Instance& inst, int j,
                          const std::vector<int>& S, double p_j,
@@ -67,7 +70,18 @@ public:
         double inventoryCost = InventoryCostFormula::totalInventoryCost(
             inst, j, S, w_j);
 
-        return revenue - facilityCost - transportCost - inventoryCost;
+        double profit = revenue - facilityCost - transportCost - inventoryCost;
+
+        // 05 减排投资成本（新逻辑：纳入列利润）
+        if (config && config->use_invest_in_column) {
+            double D_j = InventoryCostFormula::totalDemand(inst, j, S);
+            bool useSqrtModel = config->use_sqrt_investment;
+            double investCost = InvestmentCostFormula::compute(
+                inst, j, w_j, D_j, useSqrtModel);
+            profit -= investCost;
+        }
+
+        return profit;
     }
 
     /**
@@ -83,14 +97,15 @@ public:
 
         double profit = columnProfit(inst, j, S, p_j, w_j);
 
-        // 05 减排投资成本
+        // 新模式的 columnProfit 已包含投资成本，不能重复扣除。
+        if (config && config->use_invest_in_column) {
+            return profit;
+        }
+
+        // 历史模式的 columnProfit 不含投资成本，在完整利润接口中补扣一次。
         double D_j = InventoryCostFormula::totalDemand(inst, j, S);
-        double investCost = InvestmentCostFormula::compute(
+        return profit - InvestmentCostFormula::compute(
             inst, j, w_j, D_j, useSqrtModel);
-
-        profit -= investCost;
-
-        return profit;
     }
 
     /**
