@@ -198,7 +198,10 @@ private:
         monitor_.reportPostTiming(postTime);
 
         // 输出结果
-        outputResults(bestSolution, bestW, profit, emission, gaTime, 0);
+        outputResults(bestSolution, bestW, profit, emission, gaTime, 0,
+                      ga.getFitnessRequests(), ga.getUniqueChromosomes(),
+                      ga.getRepeatedChromosomeRequests(),
+                      ga.getActualFitnessCacheHits());
 
         // 后处理明细（逐 DC 的 w/p/D/Q* + 碳交易 e±）打到终端
         postProc.print();
@@ -241,7 +244,11 @@ private:
     /** 统一输出结果 */
     void outputResults(const Solution& sol, const std::vector<double>& w,
                         double profit, double emission, double solveTime,
-                        double baseProfit) {
+                        double baseProfit,
+                        long long fitnessRequests = 0,
+                        long long uniqueChromosomes = 0,
+                        long long repeatedChromosomeRequests = 0,
+                        long long actualFitnessCacheHits = 0) {
         // 统计
         int dcOpen = 0;
         for (const auto& dcSol : sol.dcSolutions) {
@@ -269,6 +276,9 @@ private:
                                    gaGens, instance_->C);
         resultWriter_.setSolution(sol.dcSolutions);
         resultWriter_.setSolveCertification(sol);
+        resultWriter_.setGAFitnessStats(
+            fitnessRequests, uniqueChromosomes,
+            repeatedChromosomeRequests, actualFitnessCacheHits);
         double totalInvestmentCost = 0.0;
         if (sol.hasIntegerSolution) {
             for (const auto& dcSol : sol.dcSolutions) {

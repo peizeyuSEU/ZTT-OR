@@ -94,6 +94,15 @@ public:
         result_.totalInvestmentCost = cost;
     }
 
+    void setGAFitnessStats(long long requests, long long uniqueChromosomes,
+                           long long repeatedRequests,
+                           long long actualCacheHits) {
+        result_.fitnessRequests = requests;
+        result_.uniqueChromosomes = uniqueChromosomes;
+        result_.repeatedChromosomeRequests = repeatedRequests;
+        result_.actualFitnessCacheHits = actualCacheHits;
+    }
+
     const ExperimentResult& getResult() const { return result_; }
 
     /** 保存完整决策方案报告 */
@@ -318,7 +327,9 @@ public:
             << "carbon_cap,e_plus,e_minus,net_carbon_trading_cost,"
             << "total_investment_cost,num_dc_open,num_retailers_served,"
             << "branch_nodes,pruned_nodes,cg_iterations,total_columns,"
-            << "ga_generations,solve_time,ga_time,bp_time,cg_time,"
+            << "ga_generations,fitness_requests,unique_chromosomes,"
+            << "repeated_chromosome_requests,actual_fitness_cache_hits,"
+            << "solve_time,ga_time,bp_time,cg_time,"
             << "pricing_time,cplex_build_time,cplex_solve_time,bb_time,best_w\n";
         file << std::setprecision(15);
         for (const auto& r : results) {
@@ -357,7 +368,10 @@ public:
             }
             file << "," << r.totalBranchNodes << "," << r.prunedNodes << ","
                  << r.totalCGIterations << "," << r.totalColumnsGenerated << ","
-                 << r.totalGAGenerations << "," << r.solveTime << ","
+                 << r.totalGAGenerations << ","
+                 << r.fitnessRequests << "," << r.uniqueChromosomes << ","
+                 << r.repeatedChromosomeRequests << ","
+                 << r.actualFitnessCacheHits << "," << r.solveTime << ","
                  << r.timing.gaTime << "," << r.timing.bpTime << ","
                  << r.timing.cgTime << "," << r.timing.pricingTime << ","
                  << r.timing.cplexBuildTime << ","

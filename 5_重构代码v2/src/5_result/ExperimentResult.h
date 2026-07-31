@@ -102,6 +102,10 @@ struct ExperimentResult {
     int totalCGIterations = 0;
     int totalColumnsGenerated = 0;
     int totalGAGenerations = 0;
+    long long fitnessRequests = 0;
+    long long uniqueChromosomes = 0;
+    long long repeatedChromosomeRequests = 0;
+    long long actualFitnessCacheHits = 0;
 
     // 时间分布
     TimingReport timing;

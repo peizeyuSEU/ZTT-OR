@@ -20,6 +20,7 @@
 #include <cmath>
 #include <limits>
 #include <unordered_map>
+#include <unordered_set>
 #include <functional>
 #include <iomanip>
 #include <sstream>
@@ -118,6 +119,12 @@ private:
     int lastGenTotalNodes_ = 0;
     bool lastGenParallel_ = false;
 
+    // GA 搜索覆盖度诊断。这里只观察，不改变适应度求解或缓存行为。
+    long long fitnessRequests_ = 0;
+    long long repeatedChromosomeRequests_ = 0;
+    long long actualFitnessCacheHits_ = 0;
+    std::unordered_set<std::string> observedChromosomes_;
+
 public:
     GeneticAlgorithm(const Config& cfg, Instance& instance)
         : config(&cfg), inst(&instance), rng(cfg.random_seed), logger(nullptr),
@@ -142,7 +149,16 @@ public:
     double getBestFitness() const { return bestFitness; }
     const std::vector<double>& getBestW() const { return bestW; }
     const Solution& getBestSolution() const { return bestSolution; }
-
+    long long getFitnessRequests() const { return fitnessRequests_; }
+    long long getUniqueChromosomes() const {
+        return static_cast<long long>(observedChromosomes_.size());
+    }
+    long long getRepeatedChromosomeRequests() const {
+        return repeatedChromosomeRequests_;
+    }
+    long long getActualFitnessCacheHits() const {
+        return actualFitnessCacheHits_;
+    }
     /** 获取 BP 内部的时间统计 */
     double getBPTime() const { return bp.getBPTime(); }
     double getCGTime() const { return bp.getCGTime(); }
@@ -489,6 +505,19 @@ private:
         int popSize = pop.size();
         std::vector<double> fitness(popSize, -DBL_MAX);
 
+        // 按原始二进制染色体精确计数；不跳过任何求解。
+        fitnessRequests_ += popSize;
+        for (const auto& chromosome : pop) {
+            std::string key;
+            key.reserve(chromosome.size());
+            for (double bit : chromosome) {
+                key.push_back(bit > 0.5 ? '1' : '0');
+            }
+            if (!observedChromosomes_.insert(std::move(key)).second) {
+                repeatedChromosomeRequests_++;
+            }
+        }
+
         bool parallel = config->parallel_fitness;
         int numThreads = config->num_threads;
         if (numThreads <= 0) numThreads = std::thread::hardware_concurrency();
@@ -790,7 +819,9 @@ private:
                 fitness[i] = result;
 
                 // 仅统计真实发生求解的个体（缓存命中直接返回，不产生 CG 迭代）
-                if (!bp.lastCallHitCache()) {
+                if (bp.lastCallHitCache()) {
+                    actualFitnessCacheHits_++;
+                } else {
                     serialCgIterations_ += bp.getLastCGIterations();
                     serialCgColumns_ += bp.getLastCGColumns();
                     serialTotalNodes_ += bp.getLastTotalNodes();
