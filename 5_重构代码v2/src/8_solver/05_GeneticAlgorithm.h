@@ -123,6 +123,11 @@ private:
     long long fitnessRequests_ = 0;
     long long repeatedChromosomeRequests_ = 0;
     long long actualFitnessCacheHits_ = 0;
+    long long fitnessBPSolves_ = 0;
+    long long fitnessBPCertifiedOptimal_ = 0;
+    long long fitnessBPFeasibleUncertified_ = 0;
+    long long fitnessBPNoInteger_ = 0;
+    long long fitnessEvaluationFailures_ = 0;
     std::unordered_set<std::string> observedChromosomes_;
     std::unordered_map<std::string, double> parallelFitnessCache_;
 
@@ -159,6 +164,19 @@ public:
     }
     long long getActualFitnessCacheHits() const {
         return actualFitnessCacheHits_;
+    }
+    long long getFitnessBPSolves() const { return fitnessBPSolves_; }
+    long long getFitnessBPCertifiedOptimal() const {
+        return fitnessBPCertifiedOptimal_;
+    }
+    long long getFitnessBPFeasibleUncertified() const {
+        return fitnessBPFeasibleUncertified_;
+    }
+    long long getFitnessBPNoInteger() const {
+        return fitnessBPNoInteger_;
+    }
+    long long getFitnessEvaluationFailures() const {
+        return fitnessEvaluationFailures_;
     }
     /** 获取 BP 内部的时间统计 */
     double getBPTime() const { return bp.getBPTime(); }
@@ -624,6 +642,8 @@ private:
                 int cgColumns;
                 int totalNodes;
                 int prunedNodes;
+                int solveStatus;
+                int hasIntegerSolution;
             };
 
             // 父进程精确缓存：只按完整二进制染色体复用。
@@ -720,6 +740,10 @@ private:
                     payload.cgColumns = localBP.getCGTotalColumns();
                     payload.totalNodes = localBP.getTotalNodes();
                     payload.prunedNodes = localBP.getPrunedNodes();
+                    payload.solveStatus =
+                        static_cast<int>(localBP.getSolveStatus());
+                    payload.hasIntegerSolution =
+                        localBP.getBestSolution().hasIntegerSolution ? 1 : 0;
 
                     ssize_t written = 0;
                     while (written < (ssize_t)sizeof(ChildResult)) {
@@ -761,8 +785,20 @@ private:
                     genCgColumns += payload.cgColumns;
                     genTotalNodes += payload.totalNodes;
                     genPrunedNodes += payload.prunedNodes;
+                    fitnessBPSolves_++;
+                    const SolveStatus status =
+                        static_cast<SolveStatus>(payload.solveStatus);
+                    if (status == SolveStatus::OPTIMAL
+                        && payload.hasIntegerSolution) {
+                        fitnessBPCertifiedOptimal_++;
+                    } else if (payload.hasIntegerSolution) {
+                        fitnessBPFeasibleUncertified_++;
+                    } else {
+                        fitnessBPNoInteger_++;
+                    }
                 } else {
                     fitness[idx] = -DBL_MAX;
+                    fitnessEvaluationFailures_++;
                 }
                 genMergeTime += std::chrono::duration<double>(
                     std::chrono::steady_clock::now() - mergeStart).count();
@@ -774,6 +810,7 @@ private:
                 if (!launchChild(idx)) {
                     std::cerr << "[GA] fork: 子进程启动失败" << std::endl;
                     fitness[idx] = -DBL_MAX;
+                    fitnessEvaluationFailures_++;
                     targetCompleted--;
                 }
                 nextTask++;
@@ -800,6 +837,7 @@ private:
                             if (!launchChild(idx)) {
                                 std::cerr << "[GA] fork: 子进程启动失败" << std::endl;
                                 fitness[idx] = -DBL_MAX;
+                                fitnessEvaluationFailures_++;
                                 targetCompleted--;
                             }
                             nextTask++;
@@ -867,6 +905,17 @@ private:
                 if (bp.lastCallHitCache()) {
                     actualFitnessCacheHits_++;
                 } else {
+                    fitnessBPSolves_++;
+                    const SolveStatus status = bp.getSolveStatus();
+                    const bool hasInteger =
+                        bp.getBestSolution().hasIntegerSolution;
+                    if (status == SolveStatus::OPTIMAL && hasInteger) {
+                        fitnessBPCertifiedOptimal_++;
+                    } else if (hasInteger) {
+                        fitnessBPFeasibleUncertified_++;
+                    } else {
+                        fitnessBPNoInteger_++;
+                    }
                     serialCgIterations_ += bp.getLastCGIterations();
                     serialCgColumns_ += bp.getLastCGColumns();
                     serialTotalNodes_ += bp.getLastTotalNodes();

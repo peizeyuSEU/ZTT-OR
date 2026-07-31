@@ -1,0 +1,44 @@
+plan_name: "release_ga_probe_30x100_certification"
+plan_desc: "Small-budget GA probe for inner-BP certification rate and resource usage"
+
+num_dc: 30
+num_retailers: 100
+random_seed: 32501
+run_mode: ga
+
+population_size: 8
+max_generation: 4
+crossover_rate: 0.7
+mutation_rate: -1
+chromosome_length: 10
+elitism: true
+early_stop: false
+
+use_sqrt_investment: true
+investment_exponent: 0.5
+use_invest_in_column: true
+
+pricing_algorithm: 1
+pricing_max_cols_per_dc: 3
+pricing_adaptive_cols: false
+pricing_per_dc_by_w: false
+parallel_pricing: false
+cplex_threads: 1
+
+root_heuristic: true
+root_rmp_mip_heuristic: true
+root_rmp_mip_time_limit_sec: 5
+
+max_cg_iterations: 1000
+cg_early_stop: false
+max_branch_nodes: 10000
+bb_node_strategy: dfs
+bp_time_limit_sec: 120
+bp_relative_gap: 0
+
+parallel_fitness: true
+num_threads: 4
+core_budget: 4
+
+experiments:
+  - name: "release_ga_probe_30x100_seed32501"

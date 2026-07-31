@@ -96,11 +96,21 @@ public:
 
     void setGAFitnessStats(long long requests, long long uniqueChromosomes,
                            long long repeatedRequests,
-                           long long actualCacheHits) {
+                           long long actualCacheHits,
+                           long long bpSolves = 0,
+                           long long bpCertifiedOptimal = 0,
+                           long long bpFeasibleUncertified = 0,
+                           long long bpNoInteger = 0,
+                           long long evaluationFailures = 0) {
         result_.fitnessRequests = requests;
         result_.uniqueChromosomes = uniqueChromosomes;
         result_.repeatedChromosomeRequests = repeatedRequests;
         result_.actualFitnessCacheHits = actualCacheHits;
+        result_.fitnessBPSolves = bpSolves;
+        result_.fitnessBPCertifiedOptimal = bpCertifiedOptimal;
+        result_.fitnessBPFeasibleUncertified = bpFeasibleUncertified;
+        result_.fitnessBPNoInteger = bpNoInteger;
+        result_.fitnessEvaluationFailures = evaluationFailures;
     }
 
     const ExperimentResult& getResult() const { return result_; }
@@ -329,6 +339,9 @@ public:
             << "branch_nodes,pruned_nodes,cg_iterations,total_columns,"
             << "ga_generations,fitness_requests,unique_chromosomes,"
             << "repeated_chromosome_requests,actual_fitness_cache_hits,"
+            << "fitness_bp_solves,fitness_bp_certified_optimal,"
+            << "fitness_bp_feasible_uncertified,fitness_bp_no_integer,"
+            << "fitness_evaluation_failures,"
             << "solve_time,ga_time,bp_time,cg_time,"
             << "pricing_time,cplex_build_time,cplex_solve_time,bb_time,best_w\n";
         file << std::setprecision(15);
@@ -371,7 +384,13 @@ public:
                  << r.totalGAGenerations << ","
                  << r.fitnessRequests << "," << r.uniqueChromosomes << ","
                  << r.repeatedChromosomeRequests << ","
-                 << r.actualFitnessCacheHits << "," << r.solveTime << ","
+                 << r.actualFitnessCacheHits << ","
+                 << r.fitnessBPSolves << ","
+                 << r.fitnessBPCertifiedOptimal << ","
+                 << r.fitnessBPFeasibleUncertified << ","
+                 << r.fitnessBPNoInteger << ","
+                 << r.fitnessEvaluationFailures << ","
+                 << r.solveTime << ","
                  << r.timing.gaTime << "," << r.timing.bpTime << ","
                  << r.timing.cgTime << "," << r.timing.pricingTime << ","
                  << r.timing.cplexBuildTime << ","

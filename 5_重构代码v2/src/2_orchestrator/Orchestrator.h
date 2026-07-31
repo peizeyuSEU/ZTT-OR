@@ -201,7 +201,12 @@ private:
         outputResults(bestSolution, bestW, profit, emission, gaTime, 0,
                       ga.getFitnessRequests(), ga.getUniqueChromosomes(),
                       ga.getRepeatedChromosomeRequests(),
-                      ga.getActualFitnessCacheHits());
+                      ga.getActualFitnessCacheHits(),
+                      ga.getFitnessBPSolves(),
+                      ga.getFitnessBPCertifiedOptimal(),
+                      ga.getFitnessBPFeasibleUncertified(),
+                      ga.getFitnessBPNoInteger(),
+                      ga.getFitnessEvaluationFailures());
 
         // 后处理明细（逐 DC 的 w/p/D/Q* + 碳交易 e±）打到终端
         postProc.print();
@@ -248,7 +253,12 @@ private:
                         long long fitnessRequests = 0,
                         long long uniqueChromosomes = 0,
                         long long repeatedChromosomeRequests = 0,
-                        long long actualFitnessCacheHits = 0) {
+                        long long actualFitnessCacheHits = 0,
+                        long long fitnessBPSolves = 0,
+                        long long fitnessBPCertifiedOptimal = 0,
+                        long long fitnessBPFeasibleUncertified = 0,
+                        long long fitnessBPNoInteger = 0,
+                        long long fitnessEvaluationFailures = 0) {
         // 统计
         int dcOpen = 0;
         for (const auto& dcSol : sol.dcSolutions) {
@@ -278,7 +288,10 @@ private:
         resultWriter_.setSolveCertification(sol);
         resultWriter_.setGAFitnessStats(
             fitnessRequests, uniqueChromosomes,
-            repeatedChromosomeRequests, actualFitnessCacheHits);
+            repeatedChromosomeRequests, actualFitnessCacheHits,
+            fitnessBPSolves, fitnessBPCertifiedOptimal,
+            fitnessBPFeasibleUncertified, fitnessBPNoInteger,
+            fitnessEvaluationFailures);
         double totalInvestmentCost = 0.0;
         if (sol.hasIntegerSolution) {
             for (const auto& dcSol : sol.dcSolutions) {

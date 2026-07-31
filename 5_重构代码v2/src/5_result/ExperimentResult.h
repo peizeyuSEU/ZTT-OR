@@ -106,6 +106,11 @@ struct ExperimentResult {
     long long uniqueChromosomes = 0;
     long long repeatedChromosomeRequests = 0;
     long long actualFitnessCacheHits = 0;
+    long long fitnessBPSolves = 0;
+    long long fitnessBPCertifiedOptimal = 0;
+    long long fitnessBPFeasibleUncertified = 0;
+    long long fitnessBPNoInteger = 0;
+    long long fitnessEvaluationFailures = 0;
 
     // 时间分布
     TimingReport timing;
