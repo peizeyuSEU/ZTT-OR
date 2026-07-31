@@ -1,0 +1,42 @@
+plan_name: "release_ablation_30x100_w08_k_parallel"
+plan_desc: "Release-build 2x2 ablation of K=1/K=3 and serial/8-thread DC pricing"
+
+num_dc: 30
+num_retailers: 100
+random_seed: 32501
+run_mode: fixed_w
+
+use_sqrt_investment: true
+investment_exponent: 0.5
+use_invest_in_column: true
+pricing_algorithm: 1
+pricing_adaptive_cols: false
+pricing_per_dc_by_w: false
+max_cg_iterations: 1000
+cg_early_stop: false
+max_branch_nodes: 10000
+bb_node_strategy: dfs
+bp_time_limit_sec: 600
+bp_relative_gap: 0
+parallel_fitness: false
+pricing_threads: 8
+core_budget: 8
+cplex_threads: 1
+
+experiments:
+  - name: "release_k1_serial"
+    pricing_max_cols_per_dc: 1
+    parallel_pricing: false
+    fixed_w: [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
+  - name: "release_k1_parallel8"
+    pricing_max_cols_per_dc: 1
+    parallel_pricing: true
+    fixed_w: [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
+  - name: "release_k3_serial"
+    pricing_max_cols_per_dc: 3
+    parallel_pricing: false
+    fixed_w: [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
+  - name: "release_k3_parallel8"
+    pricing_max_cols_per_dc: 3
+    parallel_pricing: true
+    fixed_w: [0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8]
