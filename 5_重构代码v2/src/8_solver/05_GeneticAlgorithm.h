@@ -91,7 +91,9 @@ private:
     int parallelCgIterations_ = 0;
     int parallelCgColumns_ = 0;
     int parallelTotalNodes_ = 0;
+    int parallelProcessedNodes_ = 0;
     int parallelPrunedNodes_ = 0;
+    int parallelRemainingActiveNodes_ = 0;
 
     // 串行适应度评估累计统计：与并行 fork 完全对称——逐个体取「本次求解增量」累加，
     // 缓存命中不计入。这样串行/并行上报给 monitor 的 CG 迭代口径完全一致，
@@ -99,7 +101,9 @@ private:
     int serialCgIterations_ = 0;
     int serialCgColumns_ = 0;
     int serialTotalNodes_ = 0;
+    int serialProcessedNodes_ = 0;
     int serialPrunedNodes_ = 0;
+    int serialRemainingActiveNodes_ = 0;
 
     // 并行管理开销累计（父进程侧墙钟计时，用于诊断 fork 并行是否划算）
     double parallelForkTime_ = 0.0;    // fork() + pipe() 创建子进程的墙钟耗时
@@ -239,8 +243,12 @@ public:
             }
             if (validFitnessIndices.empty()) {
                 const std::string message =
-                    "GA generation has no valid fitness value; "
-                    "terminating without a feasible solution.";
+                    GAFitnessUtils::isValid(bestFitness)
+                        ? "Current generation has no valid fitness value; "
+                          "terminating and retaining the best previously "
+                          "found solution."
+                        : "GA has no valid fitness value; terminating "
+                          "without a feasible solution.";
                 if (logger) {
                     logger->progress(0, message);
                 } else {
@@ -334,7 +342,7 @@ public:
                     pipe << "  ├─ 求解: " << (int)population.size()
                          << " 个体 fork 并行 | CG迭代=" << lastGenCgIterations_
                          << " 加列=" << lastGenCgColumns_
-                         << " BB节点=" << lastGenTotalNodes_ << "\n";
+                         << " BB分支=" << lastGenTotalNodes_ << "\n";
            pipe << "  ├─ 并行墙钟=" << wall << "s | 串行等效(ΣBP)="
                          << serialEquiv << "s | 加速比="
                          << std::setprecision(2) << speedup << "x"
@@ -424,7 +432,9 @@ public:
                                          parallelCplexSolveTime_);
                 monitor->reportPricingTiming(parallelPsTime_);
                 monitor->reportBBTiming(parallelBbTime_);
-                monitor->reportBBNodes(parallelTotalNodes_, parallelPrunedNodes_);
+                monitor->reportBBNodes(
+                    parallelTotalNodes_, parallelPrunedNodes_,
+                    parallelProcessedNodes_, parallelRemainingActiveNodes_);
                 monitor->reportCGIteration(parallelCgIterations_, parallelCgColumns_);
                 // 上报并行开销分项，使诊断树不再是全 0
                 // pipeIo 未单独计量（含在 fork 里），传 0
@@ -440,7 +450,9 @@ public:
                 monitor->reportBBTiming(bp.getBBTime());
                 // 串行 CG 迭代/节点采用 serial* 累加器（逐个体增量、缓存命中不计），
                 // 与并行 reportBBNodes/reportCGIteration 口径完全对称
-                monitor->reportBBNodes(serialTotalNodes_, serialPrunedNodes_);
+                monitor->reportBBNodes(
+                    serialTotalNodes_, serialPrunedNodes_,
+                    serialProcessedNodes_, serialRemainingActiveNodes_);
                 monitor->reportCGIteration(serialCgIterations_, serialCgColumns_);
             }
         }
@@ -678,7 +690,9 @@ private:
                 int cgIterations;
                 int cgColumns;
                 int totalNodes;
+                int processedNodes;
                 int prunedNodes;
+                int remainingActiveNodes;
                 int solveStatus;
                 int hasIntegerSolution;
             };
@@ -722,7 +736,9 @@ private:
             int genCgIterations = 0;
             int genCgColumns = 0;
             int genTotalNodes = 0;
+            int genProcessedNodes = 0;
             int genPrunedNodes = 0;
+            int genRemainingActiveNodes = 0;
 
             // 本代并行管理开销计时（墙钟口径，用于量化 fork 并行的额外成本）
             double genForkTime = 0.0;   // pipe()+fork() 创建子进程
@@ -776,7 +792,10 @@ private:
                     payload.cgIterations = localBP.getCGIterations();
                     payload.cgColumns = localBP.getCGTotalColumns();
                     payload.totalNodes = localBP.getTotalNodes();
+                    payload.processedNodes = localBP.getProcessedNodes();
                     payload.prunedNodes = localBP.getPrunedNodes();
+                    payload.remainingActiveNodes =
+                        localBP.getRemainingActiveNodes();
                     payload.solveStatus =
                         static_cast<int>(localBP.getSolveStatus());
                     payload.hasIntegerSolution =
@@ -821,7 +840,9 @@ private:
                     genCgIterations += payload.cgIterations;
                     genCgColumns += payload.cgColumns;
                     genTotalNodes += payload.totalNodes;
+                    genProcessedNodes += payload.processedNodes;
                     genPrunedNodes += payload.prunedNodes;
+                    genRemainingActiveNodes += payload.remainingActiveNodes;
                     fitnessBPSolves_++;
                     const SolveStatus status =
                         static_cast<SolveStatus>(payload.solveStatus);
@@ -905,7 +926,9 @@ private:
             parallelCgIterations_ += genCgIterations;
             parallelCgColumns_ += genCgColumns;
             parallelTotalNodes_ += genTotalNodes;
+            parallelProcessedNodes_ += genProcessedNodes;
             parallelPrunedNodes_ += genPrunedNodes;
+            parallelRemainingActiveNodes_ += genRemainingActiveNodes;
 
             // 本代 fork 段整体墙钟（含 CPU 调度等待，无法归入任何分项的差额即真实并行开销）
             double genWall = std::chrono::duration<double>(
@@ -956,7 +979,10 @@ private:
                     serialCgIterations_ += bp.getLastCGIterations();
                     serialCgColumns_ += bp.getLastCGColumns();
                     serialTotalNodes_ += bp.getLastTotalNodes();
+                    serialProcessedNodes_ += bp.getLastProcessedNodes();
                     serialPrunedNodes_ += bp.getLastPrunedNodes();
+                    serialRemainingActiveNodes_ +=
+                        bp.getLastRemainingActiveNodes();
                 }
             }
             lastGenParallel_ = false;
@@ -990,7 +1016,7 @@ private:
             }
         }
         for (int j = 0; j < inst->numDC; j++) {
-            // 使用公式层计算投资成本：½ * delta * w_j² * √D_j（论文标准版）
+            // 使用公式层计算投资成本：½ * delta * w_j² * D_j^gamma。
             double D_j = 0.0;
             for (const auto& dcSol : sol.dcSolutions) {
                 if (dcSol.dcIndex == j) {

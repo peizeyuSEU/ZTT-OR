@@ -3,6 +3,7 @@
 
 #include "../10_common/Instance.h"
 #include "../10_common/Types.h"
+#include "../10_common/SolveDeadline.h"
 #include "../10_common/Config.h"
 #include "../7_formula/08_Objective.h"
 #include "CplexWrapper.h"
@@ -261,7 +262,8 @@ public:
      */
     CGResult solve(const BranchState& branchState,
                    const CGResult* parentPool = nullptr,
-                   bool forceStrict = false) {
+                   bool forceStrict = false,
+                   const SolveDeadline* deadline = nullptr) {
         auto start = std::chrono::steady_clock::now();
         CGResult result;
         result.feasible = false;
@@ -301,12 +303,26 @@ public:
                 + " objFirst=" + std::to_string(nodeFirstObjective)
                 + " objLast=" + std::to_string(nodeLastObjective)
                 + " objGain=" + std::to_string(objectiveGain)
-                + " maxRC=" + std::to_string(nodeMaxReducedCost)
+                + " maxRC="
+                + (nodeMaxReducedCost > -DBL_MAX / 2
+                       ? std::to_string(nodeMaxReducedCost)
+                       : std::string("N/A"))
                 + " wallSec=" + std::to_string(nodeWall)
                 + " pricingSec=" + std::to_string(getPricingTime() - nodeStartPricingTime)
                 + " cplexSolveSec="
                 + std::to_string(cplexSolveTime - nodeStartCplexSolveTime));
         };
+        auto finishTimeLimit = [&]() -> CGResult {
+            result.certifiedOptimal = false;
+            result.timeLimitReached = true;
+            const auto end = std::chrono::steady_clock::now();
+            cgTime += std::chrono::duration<double>(end - start).count();
+            logNodeDiagnostic("TIME_LIMIT");
+            return result;
+        };
+        if (deadline && deadline->expired()) {
+            return finishTimeLimit();
+        }
 
         // 方案A：每次进入新节点(新 LP)时重置对偶平滑历史，避免跨节点串味。
         hasSmoothedDual_ = false;
@@ -510,13 +526,26 @@ public:
             bool adaptiveMultiActive = false;
 
             for (int iter = 0; iter < maxCgIter; iter++) {
+                if (deadline && deadline->expired()) {
+                    return finishTimeLimit();
+                }
                 totalIterations++;
 
                 // 4a. 求解RMP（计时）
+                if (deadline && deadline->enabled()) {
+                    const double remaining = deadline->remainingSeconds();
+                    if (remaining <= 0.0) return finishTimeLimit();
+                    cplex.setParam(IloCplex::TiLim,
+                                   std::max(0.001, remaining));
+                }
                 auto cplexStart = std::chrono::steady_clock::now();
                 bool hasSolution = cplex.solve();
                 auto cplexEnd = std::chrono::steady_clock::now();
                 cplexSolveTime += std::chrono::duration<double>(cplexEnd - cplexStart).count();
+
+                if (deadline && deadline->expired()) {
+                    return finishTimeLimit();
+                }
 
                 if (!hasSolution) {
                     if (logger) {
@@ -684,6 +713,7 @@ public:
 
                 // 4e. 收集所有DC中RC>0的列
                 std::vector<PricingResult> positiveCols;
+                bool pricingCompleted = true;
                 int pricingCalls = 0;  // 本次调定价的次数
                 double maxRC = -1e100;
                 int rcPositiveCount = 0;
@@ -738,19 +768,26 @@ public:
                     for (int j = 0; j < numDC; j++) {
                         int colsForDC = maxColsByDC[j];
                         pFutures[j] = pricingPool_->enqueue(
-                            [this, j, &dualVec, &branchState, colsForDC]() {
+                            [this, j, &dualVec, &branchState, colsForDC,
+                             deadline]() {
                                 if (colsForDC <= 1) {
                                     std::vector<PricingResult> r;
                                     r.push_back(
-                                        pricingSolvers_[j].solve(j, dualVec, &branchState));
+                                        pricingSolvers_[j].solve(
+                                            j, dualVec, &branchState, deadline));
                                     return r;
                                 }
                                 return pricingSolvers_[j].solveMulti(
-                                    j, dualVec, colsForDC, &branchState);
+                                    j, dualVec, colsForDC, &branchState,
+                                    deadline);
                             });
                     }
                     for (int j = 0; j < numDC; j++) {
                         std::vector<PricingResult> prs = pFutures[j].get();
+                        if (!prs.empty() && !prs.front().completed) {
+                            pricingCompleted = false;
+                            continue;
+                        }
                         pricingCalls++;
                         // 单列模式:首列可能为负列(未过滤);多列模式:solveMulti 只返回正列。
                         // 统一按 rc_eps 过滤,与串行路径口径一致。
@@ -773,8 +810,13 @@ public:
                     for (int j = 0; j < numDC; j++) {
                         int colsForDC = maxColsByDC[j];
                         if (colsForDC <= 1) {
-                            PricingResult pr = pricingSolvers_[j].solve(j, dualVec, &branchState);
+                            PricingResult pr = pricingSolvers_[j].solve(
+                                j, dualVec, &branchState, deadline);
                             pricingCalls++;
+                            if (!pr.completed) {
+                                pricingCompleted = false;
+                                break;
+                            }
                             if (pr.reducedCost > maxRC) maxRC = pr.reducedCost;
                             if (pr.reducedCost > rc_eps) {
                                 rcPositiveCount++;
@@ -782,8 +824,14 @@ public:
                             }
                         } else {
                             std::vector<PricingResult> prs =
-                                pricingSolvers_[j].solveMulti(j, dualVec, colsForDC, &branchState);
+                                pricingSolvers_[j].solveMulti(
+                                    j, dualVec, colsForDC, &branchState,
+                                    deadline);
                             pricingCalls++;
+                            if (!prs.empty() && !prs.front().completed) {
+                                pricingCompleted = false;
+                                break;
+                            }
                             // 首列为该DC最优列，用于维持 maxRC / rcPositiveCount 的原有口径
                             if (!prs.empty()) {
                                 if (prs[0].reducedCost > maxRC) maxRC = prs[0].reducedCost;
@@ -792,6 +840,9 @@ public:
                             }
                         }
                     }
+                }
+                if (!pricingCompleted || (deadline && deadline->expired())) {
+                    return finishTimeLimit();
                 }
                 lastIterPricingCalls_ = pricingCalls;
                 nodePositiveCandidates += static_cast<long long>(positiveCols.size());
@@ -833,8 +884,10 @@ public:
                     for (int i = 0; i < numConstraints; i++) trueDual[i] = price[i];
                     double trueMaxRC = -1e100;
                     for (int j = 0; j < numDC; j++) {
-                        PricingResult pr = pricingSolvers_[j].solve(j, trueDual, &branchState);
+                        PricingResult pr = pricingSolvers_[j].solve(
+                            j, trueDual, &branchState, deadline);
                         pricingCalls++;
+                        if (!pr.completed) return finishTimeLimit();
                         if (pr.reducedCost > trueMaxRC) trueMaxRC = pr.reducedCost;
                         if (pr.reducedCost > rc_eps) positiveCols.push_back(pr);
                     }
@@ -1007,8 +1060,10 @@ public:
                         for (int i = 0; i < numConstraints; i++) trueDual[i] = price[i];
                         bool foundNewStructure = false;
                         for (int j = 0; j < numDC && !foundNewStructure; j++) {
-                            PricingResult pr = pricingSolvers_[j].solve(j, trueDual, &branchState);
+                            PricingResult pr = pricingSolvers_[j].solve(
+                                j, trueDual, &branchState, deadline);
                             pricingCalls++;
+                            if (!pr.completed) return finishTimeLimit();
                             if (pr.reducedCost > rc_eps) {
                                 // 仅当该列(S)是列池中不存在的【新结构】才算真正可继续探索，
                                 // 已存在的重复列（无论是否顶上界）不计——避免与顶上界列混淆。

@@ -43,6 +43,8 @@ public:
         result_.bestW = w;
         result_.totalBranchNodes = branchNodes;
         result_.prunedNodes = monitor.prunedNodes();
+        result_.processedNodes = monitor.processedNodes();
+        result_.remainingActiveNodes = monitor.remainingActiveNodes();
         result_.totalCGIterations = monitor.columnGenIterations();
         result_.totalColumnsGenerated = monitor.totalColumns();
         result_.totalGAGenerations = gaGenerations > 0 ? gaGenerations : monitor.currentGeneration() + 1;
@@ -229,7 +231,8 @@ public:
                  << result_.solveTime << " 秒\n\n";
         }
 
-        file << "网络决策:\n";
+        if (result_.hasIntegerSolution) {
+            file << "网络决策:\n";
         file << "  开设DC数量: " << result_.numDCsOpen << "\n";
         file << "  服务零售商数量: " << result_.numRtsServed << "\n";
         if (baseProfit > 0) {
@@ -288,6 +291,7 @@ public:
         file << "  需要购买 e+: " << e_plus << "\n";
         file << "  可出售 e-: " << e_minus << "\n";
         file << "  净碳交易成本: " << inst.p * (result_.carbonEmission - inst.C) << "\n\n";
+        }
 
         // 时间分布 + 求解统计（复用 Monitor 生成的文本，与终端/run.log 完全统一）
         file << result_.timingReportText << "\n\n";
@@ -338,7 +342,8 @@ public:
             << "carbon_emission,"
             << "carbon_cap,e_plus,e_minus,net_carbon_trading_cost,"
             << "total_investment_cost,num_dc_open,num_retailers_served,"
-            << "branch_nodes,pruned_nodes,cg_iterations,total_columns,"
+            << "branch_nodes,processed_nodes,pruned_nodes,"
+            << "remaining_active_nodes,cg_iterations,total_columns,"
             << "ga_generations,fitness_requests,unique_chromosomes,"
             << "repeated_chromosome_requests,actual_fitness_cache_hits,"
             << "fitness_bp_solves,fitness_bp_certified_optimal,"
@@ -375,7 +380,8 @@ public:
             } else {
                 file << ",,,,,,,";
             }
-            file << "," << r.totalBranchNodes << "," << r.prunedNodes << ","
+            file << "," << r.totalBranchNodes << "," << r.processedNodes
+                 << "," << r.prunedNodes << "," << r.remainingActiveNodes << ","
                  << r.totalCGIterations << "," << r.totalColumnsGenerated << ","
                  << r.totalGAGenerations << ","
                  << r.fitnessRequests << "," << r.uniqueChromosomes << ","
@@ -418,14 +424,17 @@ public:
              << std::setw(10) << "时间(s)"
              << std::setw(8) << "#DC开"
              << std::setw(8) << "#R服务"
-             << std::setw(8) << "节点数"
+             << std::setw(8) << "分支数"
+             << std::setw(8) << "已处理"
+             << std::setw(8) << "已剪枝"
+             << std::setw(8) << "未处理"
              << std::setw(8) << "CG迭代"
              << std::setw(10) << "GA时间"
              << std::setw(10) << "BP时间"
              << std::setw(10) << "CG时间"
              << std::setw(10) << "PS时间"
              << std::setw(10) << "BB时间" << std::endl;
-        file << std::string(204, '-') << std::endl;
+        file << std::string(228, '-') << std::endl;
 
         for (const auto& r : results) {
             file << std::left << std::fixed << std::setprecision(2);
@@ -433,15 +442,30 @@ public:
                  << std::setw(30)
                  << overallOutcomeName(r)
                  << std::setw(6) << r.numDC
-                 << std::setw(6) << r.numRetailers
-                 << std::setw(16) << r.totalProfit
-                 << std::setw(14) << r.carbonEmission
-                 << std::setw(12) << r.ePlus
-                 << std::setw(12) << r.eMinus
-                 << std::setw(10) << r.solveTime
-                 << std::setw(8) << r.numDCsOpen
-                 << std::setw(8) << r.numRtsServed
-                 << std::setw(8) << r.totalBranchNodes
+                 << std::setw(6) << r.numRetailers;
+            if (r.hasIntegerSolution) {
+                file << std::setw(16) << r.totalProfit
+                     << std::setw(14) << r.carbonEmission
+                     << std::setw(12) << r.ePlus
+                     << std::setw(12) << r.eMinus;
+            } else {
+                file << std::setw(16) << "N/A"
+                     << std::setw(14) << "N/A"
+                     << std::setw(12) << "N/A"
+                     << std::setw(12) << "N/A";
+            }
+            file << std::setw(10) << r.solveTime;
+            if (r.hasIntegerSolution) {
+                file << std::setw(8) << r.numDCsOpen
+                     << std::setw(8) << r.numRtsServed;
+            } else {
+                file << std::setw(8) << "N/A"
+                     << std::setw(8) << "N/A";
+            }
+            file << std::setw(8) << r.totalBranchNodes
+                 << std::setw(8) << r.processedNodes
+                 << std::setw(8) << r.prunedNodes
+                 << std::setw(8) << r.remainingActiveNodes
                  << std::setw(8) << r.totalCGIterations
                  << std::setw(10) << std::setprecision(4) << r.timing.gaTime
                  << std::setw(10) << r.timing.bpTime

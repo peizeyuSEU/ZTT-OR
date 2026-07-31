@@ -98,7 +98,9 @@ struct ExperimentResult {
 
     // 算法统计
     int totalBranchNodes = 0;
+    int processedNodes = 0;
     int prunedNodes = 0;
+    int remainingActiveNodes = 0;
     int totalCGIterations = 0;
     int totalColumnsGenerated = 0;
     int totalGAGenerations = 0;

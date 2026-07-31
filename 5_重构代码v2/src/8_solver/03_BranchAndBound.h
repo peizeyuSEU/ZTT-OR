@@ -28,9 +28,9 @@
  * 4. 节点选择：选择上界最大的节点（最有希望的）优先分支
  *
  * 分支规则：
- *   对分数变量 z_j^k 分支：
- *   左分支：z_j^k = 0
- *   右分支：z_j^k = 1
+ *   对聚合分配变量 x_ij = sum_{S:i in S} z_jS 分支：
+ *   左分支：x_ij = 0
+ *   右分支：x_ij = 1
  */
 class BranchAndBound {
 private:
@@ -42,7 +42,9 @@ private:
 
     // 统计信息
     int totalNodes;
+    int processedNodes;
     int prunedNodes;
+    int remainingActiveNodes;
     int integerSolutions;
     double bestLowerBound;   // 全局最大下界（找到的最好整数解）
     double bestUpperBound;   // 全局最小上界（根节点LP解）
@@ -62,7 +64,8 @@ private:
 
 public:
     BranchAndBound() : inst(nullptr), config(nullptr), logger(nullptr),
-                       totalNodes(0), prunedNodes(0), integerSolutions(0),
+                       totalNodes(0), processedNodes(0), prunedNodes(0),
+                       remainingActiveNodes(0), integerSolutions(0),
                        bestLowerBound(-DBL_MAX), bestUpperBound(DBL_MAX),
                        bbTime(0.0), solveStatus(SolveStatus::NOT_STARTED),
                        finalRelativeGap(DBL_MAX) {}
@@ -103,7 +106,9 @@ public:
 
     /** 获取统计信息 */
     int getTotalNodes() const { return totalNodes; }
+    int getProcessedNodes() const { return processedNodes; }
     int getPrunedNodes() const { return prunedNodes; }
+    int getRemainingActiveNodes() const { return remainingActiveNodes; }
     int getIntegerSolutions() const { return integerSolutions; }
     double getBestLowerBound() const { return bestLowerBound; }
     double getBestUpperBound() const { return bestUpperBound; }
@@ -139,7 +144,9 @@ public:
 
         // 重置状态
         totalNodes = 0;
+        processedNodes = 0;
         prunedNodes = 0;
+        remainingActiveNodes = 0;
         integerSolutions = 0;
         bestLowerBound = -DBL_MAX;
         bestUpperBound = DBL_MAX;
@@ -150,12 +157,36 @@ public:
         // 重置列生成和定价的统计累加器（确保多次BP调用间统计正确）
         columnGen.resetStats();
 
+        const double kTimeLimitSec = config ? config->bp_time_limit_sec : 600.0;
+        const double kGapTol = config ? std::max(0.0, config->bp_relative_gap) : 0.0;
+        SolveDeadline deadline(kTimeLimitSec);
+
         // ===== 1. 求解根节点（输出进度到终端） =====
         BranchState rootState;
         columnGen.setConsoleProgress(true);
         // 根节点强制走严格收敛出口（forceStrict=true 禁用 tailing-off 早停），
         // 使 rootResult.lpObjective 成为严格 LP 上界，避免被早停低估。
-        CGResult rootResult = columnGen.solve(rootState, nullptr, true);
+        processedNodes++;
+        CGResult rootResult = columnGen.solve(
+            rootState, nullptr, true, &deadline);
+
+        if (rootResult.timeLimitReached) {
+            remainingActiveNodes = 1;
+            solveStatus = SolveStatus::TIME_LIMIT;
+            if (rootResult.feasible && rootResult.isInteger) {
+                bestLowerBound = rootResult.lpObjective;
+                saveIntegerSolution(rootResult);
+                integerSolutions++;
+                bestSolution.solveStatus = solveStatus;
+                bestSolution.bestBound = DBL_MAX;
+                bestSolution.relativeGap = DBL_MAX;
+                bestSolution.hasIntegerSolution = true;
+                return bestLowerBound;
+            }
+            bestSolution.solveStatus = solveStatus;
+            bestSolution.hasIntegerSolution = false;
+            return -DBL_MAX;
+        }
 
         if (!rootResult.feasible) {
             solveStatus = SolveStatus::INFEASIBLE;
@@ -210,7 +241,7 @@ public:
         nodeStack.emplace_back(rootState, rootResult);
 
         // ===== 方案B：根节点整数启发式，抬高 bestLowerBound 使剪枝尽早生效 =====
-        if (config && config->root_heuristic) {
+        if (config && config->root_heuristic && !deadline.expired()) {
             double heurLB = roundingHeuristic(rootResult);
             if (heurLB > bestLowerBound) {
                 bestLowerBound = heurLB;
@@ -219,8 +250,8 @@ public:
                     + "（上界=" + std::to_string(bestUpperBound) + "）");
             }
         }
-        if (config && config->root_rmp_mip_heuristic) {
-            double mipLB = restrictedMasterMIPHeuristic(rootResult);
+        if (config && config->root_rmp_mip_heuristic && !deadline.expired()) {
+            double mipLB = restrictedMasterMIPHeuristic(rootResult, &deadline);
             if (mipLB > bestLowerBound) {
                 bestLowerBound = mipLB;
                 if (logger) logger->progress(3, "根节点0-1 RMP启发式下界 LB="
@@ -230,8 +261,6 @@ public:
         }
 
         // 终止条件参数（防止无效分支导致长时间空转）
-        const double kTimeLimitSec = config ? config->bp_time_limit_sec : 600.0;
-        const double kGapTol = config ? std::max(0.0, config->bp_relative_gap) : 0.0;
         bool abortedByUncertifiedCG = false;
         long long hybridEligibleSelections = 0;
         long long nodeSelections = 0;
@@ -243,7 +272,7 @@ public:
             auto now = std::chrono::steady_clock::now();
             double elapsed = std::chrono::duration<double>(now - start).count();
             if (kTimeLimitSec > 0.0 && elapsed >= kTimeLimitSec) {
-                prunedNodes += (int)nodeStack.size();
+                remainingActiveNodes = static_cast<int>(nodeStack.size());
                 solveStatus = SolveStatus::TIME_LIMIT;
                 if (logger) logger->progress(3, "达到时间上限("
                     + std::to_string((int)kTimeLimitSec) + "s)，停止分支");
@@ -275,7 +304,7 @@ public:
                 double gap = std::max(0.0, (bestUpperBound - bestLowerBound) / denom);
                 finalRelativeGap = gap;
                 if (kGapTol > 0.0 && gap <= kGapTol) {
-                    prunedNodes += (int)nodeStack.size();
+                    remainingActiveNodes = static_cast<int>(nodeStack.size());
                     solveStatus = SolveStatus::GAP_LIMIT;
                     if (logger) logger->progress(3, "达到目标间隙(gap="
                         + std::to_string(gap) + " <= " + std::to_string(kGapTol)
@@ -286,7 +315,7 @@ public:
 
             // 节点限制必须在 pop 前检查，保证所有活节点仍计入有效上界。
             if (totalNodes >= config->max_branch_nodes) {
-                prunedNodes += nodeStack.size();
+                remainingActiveNodes = static_cast<int>(nodeStack.size());
                 solveStatus = SolveStatus::NODE_LIMIT;
                 if (logger) logger->progress(3, "达到最大节点数限制("
                     + std::to_string(config->max_branch_nodes) + ")，停止分支");
@@ -420,11 +449,27 @@ public:
             // selectBranchingVariable(x_ij 口径)，避免 childResult.isInteger 的 z 口径埋雷。
             {
                 BranchState childState = currentNode.state.branchOnRetailer(id_j, id_i, 0);
+                processedNodes++;
                 CGResult childResult = columnGen.solve(
-                    childState, &currentNode.cgResult, true);
+                    childState, &currentNode.cgResult, true, &deadline);
 
-                if (childResult.feasible && !childResult.certifiedOptimal) {
+                if (childResult.timeLimitReached) {
+                    if (childResult.feasible && childResult.isInteger
+                        && childResult.lpObjective > bestLowerBound) {
+                        bestLowerBound = childResult.lpObjective;
+                        saveIntegerSolution(childResult);
+                        integerSolutions++;
+                    }
+                    solveStatus = SolveStatus::TIME_LIMIT;
+                    // 左子树尚未完成，右子树也还没有开始。
+                    remainingActiveNodes =
+                        static_cast<int>(nodeStack.size()) + 2;
+                    abortedByUncertifiedCG = true;
+                } else if (childResult.feasible && !childResult.certifiedOptimal) {
                     solveStatus = SolveStatus::CG_ITERATION_LIMIT;
+                    // 左子树尚未完成，右子树也还没有开始。
+                    remainingActiveNodes =
+                        static_cast<int>(nodeStack.size()) + 2;
                     abortedByUncertifiedCG = true;
                 } else if (childResult.feasible
                     && childResult.lpObjective > bestLowerBound + 1e-6) {
@@ -438,11 +483,25 @@ public:
             // 5b. 右分支：x_ij = 1（DC j 必须服务零售商 i）
             {
                 BranchState childState = currentNode.state.branchOnRetailer(id_j, id_i, 1);
+                processedNodes++;
                 CGResult childResult = columnGen.solve(
-                    childState, &currentNode.cgResult, true);
+                    childState, &currentNode.cgResult, true, &deadline);
 
-                if (childResult.feasible && !childResult.certifiedOptimal) {
+                if (childResult.timeLimitReached) {
+                    if (childResult.feasible && childResult.isInteger
+                        && childResult.lpObjective > bestLowerBound) {
+                        bestLowerBound = childResult.lpObjective;
+                        saveIntegerSolution(childResult);
+                        integerSolutions++;
+                    }
+                    solveStatus = SolveStatus::TIME_LIMIT;
+                    remainingActiveNodes =
+                        static_cast<int>(nodeStack.size()) + 1;
+                    abortedByUncertifiedCG = true;
+                } else if (childResult.feasible && !childResult.certifiedOptimal) {
                     solveStatus = SolveStatus::CG_ITERATION_LIMIT;
+                    remainingActiveNodes =
+                        static_cast<int>(nodeStack.size()) + 1;
                     abortedByUncertifiedCG = true;
                 } else if (childResult.feasible
                     && childResult.lpObjective > bestLowerBound + 1e-6) {
@@ -495,8 +554,9 @@ public:
         bestSolution.hasIntegerSolution = true;
 
         if (logger) {
-            logger->progress(3, "分支定界结束：探索 " + std::to_string(totalNodes)
+            logger->progress(3, "分支定界结束：处理 " + std::to_string(processedNodes)
                 + " 节点，剪枝 " + std::to_string(prunedNodes)
+                + "，剩余活跃 " + std::to_string(remainingActiveNodes)
                 + "，整数解 " + std::to_string(integerSolutions)
                 + "，状态=" + std::string(solveStatusName(solveStatus))
                 + "，最好可行 obj=" + std::to_string(bestLowerBound)
@@ -663,7 +723,9 @@ private:
     // 在根节点严格列生成已经得到的有限列池上求解一个短时 0-1 restricted master。
     // 其解由原问题的合法列组成，故始终是原整数主问题的可行解；只用于抬高下界，
     // 不参与上界或最优性认证，时间到仍不影响 Branch-and-Price 的精确性。
-    double restrictedMasterMIPHeuristic(const CGResult& rootResult) {
+    double restrictedMasterMIPHeuristic(
+        const CGResult& rootResult,
+        const SolveDeadline* deadline = nullptr) {
         if (!inst) return -DBL_MAX;
         IloEnv env;
         try {
@@ -701,6 +763,13 @@ private:
             cplex.setParam(IloCplex::Threads, 1);
             double timeLimit = config
                 ? std::max(0.01, config->root_rmp_mip_time_limit_sec) : 5.0;
+            if (deadline && deadline->enabled()) {
+                timeLimit = std::min(timeLimit, deadline->remainingSeconds());
+                if (timeLimit <= 0.0) {
+                    env.end();
+                    return -DBL_MAX;
+                }
+            }
             cplex.setParam(IloCplex::TiLim, timeLimit);
             cplex.setParam(IloCplex::MIPDisplay, 0);
 

@@ -57,9 +57,12 @@ public:
         totalColumns_ = numCols;
     }
 
-    void reportBBNodes(int total, int pruned) {
+    void reportBBNodes(int total, int pruned,
+                       int processed = 0, int remainingActive = 0) {
         totalBranchNodes_ = total;
         prunedNodes_ = pruned;
+        processedNodes_ = processed;
+        remainingActiveNodes_ = remainingActive;
     }
 
     // ===== 详细时间上报（按层级）=====
@@ -149,6 +152,8 @@ public:
 
     int totalBranchNodes() const { return totalBranchNodes_; }
     int prunedNodes() const { return prunedNodes_; }
+    int processedNodes() const { return processedNodes_; }
+    int remainingActiveNodes() const { return remainingActiveNodes_; }
     int columnGenIterations() const { return columnGenIterations_; }
     int totalColumns() const { return totalColumns_; }
 
@@ -200,6 +205,8 @@ public:
         bestW_.clear();
         totalBranchNodes_ = 0;
         prunedNodes_ = 0;
+        processedNodes_ = 0;
+        remainingActiveNodes_ = 0;
         columnGenIterations_ = 0;
         totalColumns_ = 0;
         gaTime_ = 0.0;
@@ -312,16 +319,20 @@ public:
         std::ostringstream os;
         os << std::fixed << std::setprecision(4);
         os << "===== 求解统计 =====" << "\n";
-        os << "总分支节点数: " << totalBranchNodes_ << "\n";
+        os << "分支决策次数（旧branch_nodes口径）: "
+           << totalBranchNodes_ << "\n";
+        os << "已处理节点数: " << processedNodes_ << "\n";
         os << "剪枝节点数: " << prunedNodes_ << "\n";
+        os << "累计未处理活跃节点数: "
+           << remainingActiveNodes_ << "\n";
         os << "列生成迭代次数: " << columnGenIterations_ << "\n";
         os << "总列数: " << totalColumns_ << "\n";
         // 派生指标：拆分"迭代总数"到底来自"节点多"还是"每节点迭代多"
-        if (totalBranchNodes_ > 0) {
+        if (processedNodes_ > 0) {
             double iterPerNode =
-                static_cast<double>(columnGenIterations_) / totalBranchNodes_;
+                static_cast<double>(columnGenIterations_) / processedNodes_;
             double colPerNode =
-                static_cast<double>(totalColumns_) / totalBranchNodes_;
+                static_cast<double>(totalColumns_) / processedNodes_;
             os << "平均每节点CG迭代: " << iterPerNode << "\n";
             os << "平均每节点生成列: " << colPerNode << "\n";
         }
@@ -357,6 +368,8 @@ private:
     // 算法统计
     int totalBranchNodes_ = 0;
     int prunedNodes_ = 0;
+    int processedNodes_ = 0;
+    int remainingActiveNodes_ = 0;
     int columnGenIterations_ = 0;
     int totalColumns_ = 0;
 

@@ -66,6 +66,7 @@ struct PricingResult {
     std::vector<int> optimal_S;
     double optimal_pj = 0.0;
     int dcIndex = -1;
+    bool completed = true;
     PricingResult() = default;
     PricingResult(int numRetailers) : optimal_S(numRetailers, 0) {}
 };
@@ -76,6 +77,7 @@ struct CGResult {
     bool feasible = true;
     bool certifiedOptimal = false;
     bool iterationLimitReached = false;
+    bool timeLimitReached = false;
     std::vector<std::vector<double>> final_z_j;
     std::vector<std::vector<std::vector<int>>> j_S;
     std::vector<std::vector<double>> p_j;

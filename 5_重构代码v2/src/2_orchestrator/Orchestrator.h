@@ -350,20 +350,21 @@ private:
         if (sol.hasIntegerSolution) {
             std::cout << "总利润: " << profit << std::endl;
             std::cout << "碳排放: " << emission << std::endl;
+            std::cout << "#DCs Open: " << dcOpen << std::endl;
+            std::cout << "#Rts Served: " << rtServed << std::endl;
+
+            // 碳交易量（e+ 需购买 / e- 可出售）只对真实整数方案有定义。
+            double cCap = instance_->C;
+            double ePlus = std::max(0.0, emission - cCap);
+            double eMinus = std::max(0.0, cCap - emission);
+            std::cout << "碳配额 C: " << cCap
+                      << " | e+ 购买: " << ePlus
+                      << " | e- 出售: " << eMinus << std::endl;
         } else {
-            std::cout << "未获得整数可行解，未报告利润和决策方案。" << std::endl;
+            std::cout << "未获得整数可行解，相关利润、决策与碳指标不报告。"
+                      << std::endl;
         }
         std::cout << "求解时间(秒): " << solveTime << std::endl;
-        std::cout << "#DCs Open: " << dcOpen << std::endl;
-        std::cout << "#Rts Served: " << rtServed << std::endl;
-
-        // 碳交易量（e+ 需购买 / e- 可出售），直观反映减排效果
-        double cCap = instance_->C;
-        double ePlus = std::max(0.0, emission - cCap);
-        double eMinus = std::max(0.0, cCap - emission);
-        std::cout << "碳配额 C: " << cCap
-                  << " | e+ 购买: " << ePlus
-                 << " | e- 出售: " << eMinus << std::endl;
     }
 
     static std::string wToString(const std::vector<double>& w) {

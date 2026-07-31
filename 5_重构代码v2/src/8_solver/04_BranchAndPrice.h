@@ -48,7 +48,9 @@ private:
     int accCGIterations_;
     int accCGColumns_;
     int accTotalNodes_;
+    int accProcessedNodes_;
     int accPrunedNodes_;
+    int accRemainingActiveNodes_;
 
     // ===== 细粒度诊断累加器（临时，定位 CG other 去向，全程累计） =====
     double accDbgDualTime_ = 0.0;
@@ -74,7 +76,8 @@ public:
                        accCGTime_(0.0), accPricingTime_(0.0), accBBTime_(0.0),
                        accCplexBuildTime_(0.0), accCplexSolveTime_(0.0),
                        accCGIterations_(0), accCGColumns_(0),
-                       accTotalNodes_(0), accPrunedNodes_(0) {}
+                       accTotalNodes_(0), accProcessedNodes_(0),
+                       accPrunedNodes_(0), accRemainingActiveNodes_(0) {}
 
     void setInstance(const Instance& instance) {
         inst = &instance;
@@ -93,7 +96,7 @@ public:
         if (!bpBannerPrinted) {
             std::cout << "\n  ========== [环节2/5] 分支定价 BP（固定 w_j 下精确求解整数规划） ==========" << std::endl;
             std::cout << "    设计: 列生成(求 LP 松弛) + 分支定界(恢复整数) = 分支定价" << std::endl;
-            std::cout << "    收尾: LP 目标 + 碳配额收入 - 减排投资成本(½δw²D^γ) = 个体适应度" << std::endl;
+            std::cout << "    收尾: 内层列利润已包含减排投资成本；BP整数结果完成后仅加回碳配额常数收益" << std::endl;
             std::cout << "    优化: fitnessCache 以 w 向量为键去重，重复 w 直接返回历史利润(避免重算整棵搜索树)" << std::endl;
             std::cout << "    投资成本模型: "
                       << (cfg.use_sqrt_investment
@@ -135,7 +138,11 @@ public:
     int getLastCGIterations() const { return bnb.getCGIterations(); }
     int getLastCGColumns() const { return bnb.getCGTotalColumns(); }
     int getLastTotalNodes() const { return bnb.getTotalNodes(); }
+    int getLastProcessedNodes() const { return bnb.getProcessedNodes(); }
     int getLastPrunedNodes() const { return bnb.getPrunedNodes(); }
+    int getLastRemainingActiveNodes() const {
+        return bnb.getRemainingActiveNodes();
+    }
     // 本次 solve() 是否命中缓存（未做真实求解）。串行累加口径据此跳过缓存命中项。
     bool lastCallHitCache() const { return lastHitCache_; }
 
@@ -163,7 +170,9 @@ public:
                                          accCplexSolveTime_);
                 monitor->reportPricingTiming(accPricingTime_);
                 monitor->reportBBTiming(accBBTime_);
-                monitor->reportBBNodes(accTotalNodes_, accPrunedNodes_);
+                monitor->reportBBNodes(
+                    accTotalNodes_, accPrunedNodes_, accProcessedNodes_,
+                    accRemainingActiveNodes_);
                 monitor->reportCGIteration(accCGIterations_, accCGColumns_);
             }
             return cacheIt->second.profit;
@@ -258,7 +267,9 @@ public:
         accCGIterations_ += bnb.getCGIterations();
         accCGColumns_ += bnb.getCGTotalColumns();
         accTotalNodes_ += bnb.getTotalNodes();
+        accProcessedNodes_ += bnb.getProcessedNodes();
         accPrunedNodes_ += bnb.getPrunedNodes();
+        accRemainingActiveNodes_ += bnb.getRemainingActiveNodes();
 
         // ===== 细粒度诊断累加（定位 CG other 去向）=====
         // 默认关闭：这些累加与底层 chrono 计时只在排障时需要，生产路径不计开销。
@@ -296,14 +307,24 @@ public:
                                      accCplexSolveTime_);
             monitor->reportPricingTiming(accPricingTime_);
             monitor->reportBBTiming(accBBTime_);
-            monitor->reportBBNodes(accTotalNodes_, accPrunedNodes_);
+            monitor->reportBBNodes(
+                accTotalNodes_, accPrunedNodes_, accProcessedNodes_,
+                accRemainingActiveNodes_);
             monitor->reportCGIteration(accCGIterations_, accCGColumns_);
         }
 
         if (logger && !label.empty()) {
-            logger->progress(1, label + "适应度 = " + std::to_string(result)
-                + "（" + std::to_string(bnb.getTotalNodes()) + "节点，"
-                + std::to_string(bnb.getCGIterations()) + " CG迭代）");
+            if (result > -DBL_MAX / 2) {
+                logger->progress(1, label + "适应度 = " + std::to_string(result)
+                    + "（" + std::to_string(bnb.getProcessedNodes())
+                    + "已处理节点，"
+                    + std::to_string(bnb.getCGIterations()) + " CG迭代）");
+            } else {
+                logger->progress(
+                    1, label + "未获得整数可行解，状态="
+                           + std::string(solveStatusName(
+                                 lastSolution_.solveStatus)));
+            }
         }
 
         return result;
@@ -317,7 +338,9 @@ public:
 
     /** 获取分支定界统计 */
     int getTotalNodes() const { return accTotalNodes_; }
+    int getProcessedNodes() const { return accProcessedNodes_; }
     int getPrunedNodes() const { return accPrunedNodes_; }
+    int getRemainingActiveNodes() const { return accRemainingActiveNodes_; }
     int getIntegerSolutions() const { return bnb.getIntegerSolutions(); }
 
 private:

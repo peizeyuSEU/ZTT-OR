@@ -4,6 +4,7 @@
 #include "../10_common/Instance.h"
 #include "../10_common/Types.h"
 #include "../10_common/Config.h"
+#include "../10_common/SolveDeadline.h"
 #include "../7_formula/03_TransportCost.h"
 #include "../7_formula/04_InventoryCost.h"
 #include "../7_formula/08_Objective.h"
@@ -124,13 +125,18 @@ public:
      * @return 最优列（S, p_j）和检验数
      */
     PricingResult solve(int j, const std::vector<double>& dual,
-                        const BranchState* branch = nullptr) {
+                        const BranchState* branch = nullptr,
+                        const SolveDeadline* deadline = nullptr) {
         auto start = std::chrono::steady_clock::now();
         pricingIterCounter++;
 
         PricingResult result(inst->numRetailer);
         result.dcIndex = j;
         result.reducedCost = -DBL_MAX;
+        if (deadline && deadline->expired()) {
+            result.completed = false;
+            return result;
+        }
         lastFreshCandidates_.clear();
         auto collectFresh = [&](const PricingResult& candidate) {
             if (requestedFreshCols_ <= 1 || candidate.reducedCost <= rc_eps) return;
@@ -266,6 +272,10 @@ public:
                 std::vector<std::pair<double, double>> priced;  // (上界, 价格)
                 priced.reserve(candidate_prices.size());
                 for (double price : candidate_prices) {
+                    if (deadline && deadline->expired()) {
+                        result.completed = false;
+                        break;
+                    }
                     priced.emplace_back(
                         computePriceUpperBound(j, price, dual, &featBase), price);
                 }
@@ -275,6 +285,10 @@ public:
                               return a.first > b.first;  // 上界降序
                           });
                 for (const auto& pr : priced) {
+                    if (deadline && deadline->expired()) {
+                        result.completed = false;
+                        break;
+                    }
                     const double stopThreshold =
                         (requestedFreshCols_ <= 1)
                             ? result.reducedCost
@@ -300,7 +314,11 @@ public:
                                 : verifiedCandidate;
                         PricingResult exactCandidate =
                             solveForPrice_Algorithm3(
-                                j, price, dual, branch, &featBase);
+                                j, price, dual, branch, &featBase, deadline);
+                        if (!exactCandidate.completed) {
+                            result.completed = false;
+                            break;
+                        }
                         if (exactCandidate.reducedCost
                                 > subResult.reducedCost) {
                             subResult = exactCandidate;
@@ -309,7 +327,11 @@ public:
                         subResult = solveForPrice_Simplified(j, price, dual, branch, &featBase);
                         PricingResult verifiedCandidate =
                             solveForPrice_Algorithm3(
-                                j, price, dual, branch, &featBase);
+                                j, price, dual, branch, &featBase, deadline);
+                        if (!verifiedCandidate.completed) {
+                            result.completed = false;
+                            break;
+                        }
                         if (verifiedCandidate.reducedCost
                             > subResult.reducedCost) {
                             subResult = verifiedCandidate;
@@ -322,9 +344,17 @@ public:
                 }
             } else {
                 for (double price : candidate_prices) {
+                    if (deadline && deadline->expired()) {
+                        result.completed = false;
+                        break;
+                    }
                     PricingResult subResult =
                         solveForPrice_Algorithm3(
-                            j, price, dual, branch, &featBase);
+                            j, price, dual, branch, &featBase, deadline);
+                    if (!subResult.completed) {
+                        result.completed = false;
+                        break;
+                    }
                     collectFresh(subResult);
                     if (subResult.reducedCost > result.reducedCost) {
                         result = subResult;
@@ -334,7 +364,8 @@ public:
             collectFresh(result);
 
             // 如果找到了正检验数列，加入多列缓存（去重 + LRU 淘汰）
-            if (result.reducedCost > rc_eps && j < (int)cachedBestCols.size()) {
+            if (result.completed && result.reducedCost > rc_eps
+                && j < (int)cachedBestCols.size()) {
                 auto& colList = cachedBestCols[j];
                 // 去重：若已有相同列(相同S且相同p_j)，仅刷新其检验数与迭代号
                 bool duplicate = false;
@@ -389,11 +420,16 @@ public:
      */
     std::vector<PricingResult> solveMulti(int j, const std::vector<double>& dual,
                                           int maxCols,
-                                          const BranchState* branch = nullptr) {
+                                          const BranchState* branch = nullptr,
+                                          const SolveDeadline* deadline = nullptr) {
         std::vector<PricingResult> out;
         requestedFreshCols_ = std::max(1, maxCols);
-        PricingResult best = solve(j, dual, branch);
+        PricingResult best = solve(j, dual, branch, deadline);
         requestedFreshCols_ = 1;
+        if (!best.completed) {
+            out.push_back(best);
+            return out;
+        }
         if (best.reducedCost <= rc_eps) {
             return out;  // 无正检验数列，直接返回空
         }
@@ -1020,10 +1056,15 @@ private:
     PricingResult solveForPrice_Algorithm3(int j, double p_j,
                                              const std::vector<double>& dual,
                                              const BranchState* branch = nullptr,
-                                             const FeatureBase* base = nullptr) {
+                                             const FeatureBase* base = nullptr,
+                                             const SolveDeadline* deadline = nullptr) {
         PricingResult result(inst->numRetailer);
         result.dcIndex = j;
         result.optimal_pj = p_j;
+        if (deadline && deadline->expired()) {
+            result.completed = false;
+            return result;
+        }
 
         double w_j = (j < (int)inst->w.size()) ? inst->w[j] : 0.0;
         auto features = base ? computeFeatures(j, p_j, dual, *base)
@@ -1185,6 +1226,10 @@ private:
         // ===== Step 2-3: 枚举所有点对 =====
         for (int p = 0; p < num - 1; p++) {
             for (int q = p + 1; q < num; q++) {
+                if (deadline && deadline->expired()) {
+                    result.completed = false;
+                    return result;
+                }
                 double xp = points[p].x, yp = points[p].y;
                 double xq = points[q].x, yq = points[q].y;
 
@@ -1297,6 +1342,10 @@ private:
         {
             for (int m = 0; m < num - 1; m++) {
                 for (int n = m + 1; n < num; n++) {
+                    if (deadline && deadline->expired()) {
+                        result.completed = false;
+                        return result;
+                    }
                     double xi_m = points[m].simpleX;
                     double yi_m = points[m].simpleY;
                     double xi_n = points[n].simpleX;

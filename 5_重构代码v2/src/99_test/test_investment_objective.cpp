@@ -1,8 +1,10 @@
 #include "../10_common/Config.h"
 #include "../10_common/ExactWKey.h"
 #include "../10_common/GAFitnessUtils.h"
+#include "../10_common/SolveDeadline.h"
 #include "../10_common/Instance.h"
 #include "../5_result/ExperimentResult.h"
+#include "../5_result/ResultWriter.h"
 #include "../7_formula/01_Revenue.h"
 #include "../7_formula/02_FacilityCost.h"
 #include "../7_formula/03_TransportCost.h"
@@ -14,7 +16,9 @@
 #include <cfloat>
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <iostream>
+#include <fstream>
 #include <limits>
 #include <random>
 #include <sstream>
@@ -272,6 +276,52 @@ int main() {
             || ExactWKey::make({0.0}) != ExactWKey::make({-0.0})) {
             throw std::runtime_error(
                 "exact w cache key is not deterministic");
+        }
+
+        SolveDeadline disabledDeadline(0.0);
+        if (disabledDeadline.expired()
+            || !std::isinf(disabledDeadline.remainingSeconds())) {
+            throw std::runtime_error("disabled solve deadline is not inert");
+        }
+        SolveDeadline shortDeadline(0.001);
+        while (!shortDeadline.expired()) {
+        }
+        if (shortDeadline.remainingSeconds() != 0.0) {
+            throw std::runtime_error("solve deadline did not expire cleanly");
+        }
+
+        ExperimentResult noSolutionResult;
+        noSolutionResult.experimentName = "no_solution_output_test";
+        noSolutionResult.runMode = "fixed_w";
+        noSolutionResult.solveStatus = SolveStatus::TIME_LIMIT;
+        noSolutionResult.hasIntegerSolution = false;
+        const std::string noSolutionTable =
+            "test_no_solution_output_table.tmp";
+        ResultWriter::saveExperimentTable(
+            noSolutionTable, {noSolutionResult});
+        std::ifstream noSolutionInput(noSolutionTable);
+        std::stringstream noSolutionBuffer;
+        noSolutionBuffer << noSolutionInput.rdbuf();
+        noSolutionInput.close();
+        std::remove(noSolutionTable.c_str());
+        const std::string noSolutionText = noSolutionBuffer.str();
+        const std::size_t rowStart =
+            noSolutionText.find("no_solution_output_test");
+        const std::size_t rowEnd = noSolutionText.find('\n', rowStart);
+        const std::string noSolutionRow =
+            rowStart == std::string::npos
+                ? std::string()
+                : noSolutionText.substr(rowStart, rowEnd - rowStart);
+        std::size_t npos = 0;
+        int naCount = 0;
+        while ((npos = noSolutionRow.find("N/A", npos))
+               != std::string::npos) {
+            ++naCount;
+            npos += 3;
+        }
+        if (naCount != 6) {
+            throw std::runtime_error(
+                "no-solution summary row contains fabricated decisions");
         }
 
         const Instance inst = makeInstance();
@@ -540,6 +590,10 @@ int main() {
                      "selection weights.\n";
         std::cout << "PASS: BP fitness cache keys distinguish adjacent double "
                      "w values.\n";
+        std::cout << "PASS: cooperative solve deadlines expire and disabled "
+                     "deadlines remain inert.\n";
+        std::cout << "PASS: no-solution text summaries report decision and "
+                     "carbon fields as N/A.\n";
         std::cout << "PASS: exhaustive service-set check (8/8).\n";
         std::cout << "PASS: post-deduction legacy ranking can select a different "
                      "service set.\n";
