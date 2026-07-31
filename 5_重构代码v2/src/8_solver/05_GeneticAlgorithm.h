@@ -124,6 +124,7 @@ private:
     long long repeatedChromosomeRequests_ = 0;
     long long actualFitnessCacheHits_ = 0;
     std::unordered_set<std::string> observedChromosomes_;
+    std::unordered_map<std::string, double> parallelFitnessCache_;
 
 public:
     GeneticAlgorithm(const Config& cfg, Instance& instance)
@@ -507,13 +508,16 @@ private:
 
         // 按原始二进制染色体精确计数；不跳过任何求解。
         fitnessRequests_ += popSize;
-        for (const auto& chromosome : pop) {
+        std::vector<std::string> chromosomeKeys(popSize);
+        for (int i = 0; i < popSize; ++i) {
+            const auto& chromosome = pop[i];
             std::string key;
             key.reserve(chromosome.size());
             for (double bit : chromosome) {
                 key.push_back(bit > 0.5 ? '1' : '0');
             }
-            if (!observedChromosomes_.insert(std::move(key)).second) {
+            chromosomeKeys[i] = key;
+            if (!observedChromosomes_.insert(key).second) {
                 repeatedChromosomeRequests_++;
             }
         }
@@ -622,11 +626,35 @@ private:
                 int prunedNodes;
             };
 
+            // 父进程精确缓存：只按完整二进制染色体复用。
+            // evaluationIndices 中只保留本次真正需要 fork 求解的代表个体；
+            // duplicateOf 处理同一代首次出现、尚未来得及写入跨代缓存的重复项。
+            std::vector<int> evaluationIndices;
+            std::vector<int> duplicateOf(popSize, -1);
+            std::unordered_map<std::string, int> pendingRepresentatives;
+            evaluationIndices.reserve(popSize);
+            for (int i = 0; i < popSize; ++i) {
+                auto cached = parallelFitnessCache_.find(chromosomeKeys[i]);
+                if (cached != parallelFitnessCache_.end()) {
+                    fitness[i] = cached->second;
+                    actualFitnessCacheHits_++;
+                    continue;
+                }
+                auto pending = pendingRepresentatives.find(chromosomeKeys[i]);
+                if (pending != pendingRepresentatives.end()) {
+                    duplicateOf[i] = pending->second;
+                    actualFitnessCacheHits_++;
+                    continue;
+                }
+                pendingRepresentatives.emplace(chromosomeKeys[i], i);
+                evaluationIndices.push_back(i);
+            }
+
             std::vector<int> childPids(popSize, -1);
             std::vector<std::array<int, 2>> pipes(popSize);
             int running = 0;
-            int nextIdx = 0;
-            int targetCompleted = popSize;
+            int nextTask = 0;
+            int targetCompleted = static_cast<int>(evaluationIndices.size());
 
             double genBpTime = 0.0;
             double genCgTime = 0.0;
@@ -740,13 +768,15 @@ private:
                     std::chrono::steady_clock::now() - mergeStart).count();
             };
 
-            while (nextIdx < popSize && running < numThreads) {
-                if (!launchChild(nextIdx)) {
+            while (nextTask < static_cast<int>(evaluationIndices.size())
+                   && running < numThreads) {
+                int idx = evaluationIndices[nextTask];
+                if (!launchChild(idx)) {
                     std::cerr << "[GA] fork: 子进程启动失败" << std::endl;
-                    fitness[nextIdx] = -DBL_MAX;
+                    fitness[idx] = -DBL_MAX;
                     targetCompleted--;
                 }
-                nextIdx++;
+                nextTask++;
             }
 
             int completed = 0;
@@ -763,16 +793,31 @@ private:
                         childPids[i] = -1;
                         running--;
                         completed++;
-                        while (nextIdx < popSize && running < numThreads) {
-                            if (!launchChild(nextIdx)) {
+                        while (nextTask
+                                   < static_cast<int>(evaluationIndices.size())
+                               && running < numThreads) {
+                            int idx = evaluationIndices[nextTask];
+                            if (!launchChild(idx)) {
                                 std::cerr << "[GA] fork: 子进程启动失败" << std::endl;
-                                fitness[nextIdx] = -DBL_MAX;
+                                fitness[idx] = -DBL_MAX;
                                 targetCompleted--;
                             }
-                            nextIdx++;
+                            nextTask++;
                         }
                         break;
                     }
+                }
+            }
+
+            // 仅缓存成功返回的真实适应度；进程/管道失败的 -DBL_MAX 不进入缓存。
+            for (int idx : evaluationIndices) {
+                if (fitness[idx] > -DBL_MAX / 2) {
+                    parallelFitnessCache_[chromosomeKeys[idx]] = fitness[idx];
+                }
+            }
+            for (int i = 0; i < popSize; ++i) {
+                if (duplicateOf[i] >= 0) {
+                    fitness[i] = fitness[duplicateOf[i]];
                 }
             }
 
