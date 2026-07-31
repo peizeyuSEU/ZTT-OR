@@ -1,0 +1,38 @@
+plan_name: "ga_mutation_pilot_20x70"
+plan_desc: "Single-seed timing probe before the formal 20x70 mutation comparison"
+
+num_dc: 20
+num_retailers: 70
+run_mode: ga
+
+population_size: 8
+max_generation: 4
+crossover_rate: 0.7
+chromosome_length: 10
+elitism: true
+early_stop: false
+
+use_sqrt_investment: true
+investment_exponent: 0.5
+use_invest_in_column: true
+
+pricing_algorithm: 1
+pricing_max_cols_per_dc: 1
+max_cg_iterations: 1000
+cg_early_stop: false
+max_branch_nodes: 10000
+bp_time_limit_sec: 600
+bp_relative_gap: 0
+
+parallel_fitness: true
+num_threads: 4
+parallel_pricing: false
+cplex_threads: 1
+
+experiments:
+  - name: "seed32501_adaptive_parallel4"
+    random_seed: 32501
+    mutation_rate: -1
+  - name: "seed32501_m005_parallel4"
+    random_seed: 32501
+    mutation_rate: 0.05

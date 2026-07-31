@@ -15,11 +15,18 @@ CONCERT_LIB = $(CPLEX_HOME)/concert/lib/x86-64_linux/static_pic
 
 # 编译器配置
 CXX = g++
+# 正式性能实验默认关闭逐轮 CG 诊断。需要定位对偶退化或时间构成时，
+# 显式执行 `make -f Build.mk diagnostics`；切换模式会先清理旧目标文件，
+# 避免因编译参数变化而复用错误的 .o。
+CG_DIAG ?= 0
 # 输出根目录：用编译期绝对路径锁定到 v2 根（src 的上一级），
 # 使日志固定落到 v2/results，与运行时的当前目录(cwd)完全无关，
 # 避免在不同 cwd 下运行导致结果散落到多个位置。
 OUTPUT_ROOT = $(abspath ..)
-CXXFLAGS = -std=c++17 -O2 -DIL_STD -I . -I$(CPLEX_INC) -I$(CONCERT_INC) -DOUTPUT_ROOT='"$(OUTPUT_ROOT)"' -DCG_DIAG
+CXXFLAGS = -std=c++17 -O2 -DIL_STD -I . -I$(CPLEX_INC) -I$(CONCERT_INC) -DOUTPUT_ROOT='"$(OUTPUT_ROOT)"'
+ifeq ($(CG_DIAG),1)
+CXXFLAGS += -DCG_DIAG
+endif
 LDFLAGS = -L$(CPLEX_LIB) -L$(CONCERT_LIB) -lilocplex -lcplex -lconcert -lpthread -ldl -lm
 
 # 源文件
@@ -39,7 +46,7 @@ INVESTMENT_TEST_TARGET = ../bin/test_investment_objective
 CONFIG = 1_launcher/configs/delta3000.yaml
 
 # 默认目标
-.PHONY: all clean run experiments all-bins test-investment
+.PHONY: all clean run experiments all-bins test-investment release diagnostics
 
 all: $(TARGET)
 
@@ -47,6 +54,15 @@ experiments: $(EXPERIMENT_TARGET)
 
 # 一次性编译两个产物：单跑 ga_bp + 批量 batch
 all-bins: $(TARGET) $(EXPERIMENT_TARGET)
+
+# 显式构建模式。二者均先清理，保证切换 CG_DIAG 时不会复用旧对象。
+release:
+	$(MAKE) -f Build.mk clean
+	$(MAKE) -f Build.mk all-bins CG_DIAG=0
+
+diagnostics:
+	$(MAKE) -f Build.mk clean
+	$(MAKE) -f Build.mk all-bins CG_DIAG=1
 
 test-investment: $(INVESTMENT_TEST_TARGET)
 	$(INVESTMENT_TEST_TARGET)
