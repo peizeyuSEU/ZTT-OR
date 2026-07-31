@@ -7,6 +7,7 @@
 #include "../10_common/Config.h"
 #include "../10_common/Random.h"
 #include "../10_common/GAFitnessUtils.h"
+#include "../10_common/CertifiedCache.h"
 #include "../3_monitor/Monitor.h"
 #include "../4_logger/Logger.h"
 #include "../10_common/ThreadPool.h"
@@ -221,7 +222,7 @@ public:
         std::cout << "        提前停止=" << (config->early_stop ? "是" : "否")
                   << " | 连续未提升阈值=" << config->convergence_generations << "代"
                   << " | 提升容差=" << config->convergence_tolerance << std::endl;
-        std::cout << "  优化: 二进制解码查表(替代 std::pow) | 每 w 命中 BP 层 fitnessCache 直接返回" << std::endl;
+        std::cout << "  优化: 二进制解码查表(替代 std::pow) | 相同 w 仅复用认证最优的BP缓存" << std::endl;
 
         // ===== 2. 主迭代 =====
         int noImproveCount = 0;
@@ -358,7 +359,7 @@ public:
                          << "_ind{0.." << ((int)population.size() - 1) << "}.log";
                 } else {
                     pipe << "  └─ 求解: 个体串行顺序评估"
-                         << " (fitnessCache 可命中，无 fork 开销)";
+                         << " (认证最优 fitnessCache 可命中，无 fork 开销)";
                 }
                 if (logger) {
                     logger->raw(pipe.str());
@@ -644,7 +645,7 @@ private:
                 std::cout << "  |     计时口径: 并行时 BP/CG/PS 取墙钟聚合，避免子进程 CPU 时间累加超过总时间" << std::endl;
             } else {
                 std::cout << "  | >>> 当前模式: 【串行】逐个个体顺序评估" << std::endl;
-                std::cout << "  |     执行方式: 复用同一 BranchAndPrice 对象，个体间 fitnessCache 可命中" << std::endl;
+                std::cout << "  |     执行方式: 复用同一 BranchAndPrice 对象，仅认证最优结果可跨个体命中缓存" << std::endl;
                 std::cout << "  |     未并行原因: ";
        if (!condParallelFlag) std::cout << "parallel_fitness=false ";
                 if (!condPop)          std::cout << "种群规模<=1 ";
@@ -723,6 +724,9 @@ private:
 
             std::vector<int> childPids(popSize, -1);
             std::vector<std::array<int, 2>> pipes(popSize);
+            std::vector<SolveStatus> evaluationStatus(
+                popSize, SolveStatus::ERROR);
+            std::vector<bool> evaluationHasInteger(popSize, false);
             int running = 0;
             int nextTask = 0;
             int targetCompleted = static_cast<int>(evaluationIndices.size());
@@ -846,6 +850,9 @@ private:
                     fitnessBPSolves_++;
                     const SolveStatus status =
                         static_cast<SolveStatus>(payload.solveStatus);
+                    evaluationStatus[idx] = status;
+                    evaluationHasInteger[idx] =
+                        payload.hasIntegerSolution != 0;
                     if (status == SolveStatus::OPTIMAL
                         && payload.hasIntegerSolution) {
                         fitnessBPCertifiedOptimal_++;
@@ -905,11 +912,12 @@ private:
                 }
             }
 
-            // 仅缓存成功返回的真实适应度；进程/管道失败的 -DBL_MAX 不进入缓存。
+            // 跨代只缓存内层BP已认证最优的整数结果。未认证可行结果仍可作为
+            // 当前代适应度，并可由同代重复染色体共享，但以后再次出现必须重算。
             for (int idx : evaluationIndices) {
-                if (fitness[idx] > -DBL_MAX / 2) {
-                    parallelFitnessCache_[chromosomeKeys[idx]] = fitness[idx];
-                }
+                CertifiedCache::store(
+                    parallelFitnessCache_, chromosomeKeys[idx], fitness[idx],
+                    evaluationStatus[idx], evaluationHasInteger[idx]);
             }
             for (int i = 0; i < popSize; ++i) {
                 if (duplicateOf[i] >= 0) {
@@ -1133,32 +1141,8 @@ private:
         const std::vector<std::vector<double>>& pop,
         const std::vector<double>& fitness,
         const std::vector<std::vector<double>>& offspring) {
-
-        int popSize = pop.size();
-        int geneLength = pop[0].size();
-        std::vector<std::vector<double>> newPop(popSize, std::vector<double>(geneLength));
-
-        int bestIdx = 0;
-        for (int i = 1; i < popSize; i++) {
-            if (fitness[i] > fitness[bestIdx]) {
-                bestIdx = i;
-            }
-        }
-
-        if (config->elitism) {
-            newPop[0] = pop[bestIdx];
-            int targetIdx = 1;
-            for (int i = 0; i < popSize && targetIdx < popSize; i++) {
-                if (i != bestIdx) {
-                    newPop[targetIdx] = offspring[i];
-                    targetIdx++;
-                }
-            }
-        } else {
-            newPop = offspring;
-        }
-
-        return newPop;
+        return GAFitnessUtils::replaceWithElite(
+            pop, fitness, offspring, config->elitism);
     }
 
     double getElapsedSeconds() const {

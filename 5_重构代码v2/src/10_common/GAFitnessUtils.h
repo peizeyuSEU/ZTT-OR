@@ -1,6 +1,7 @@
 #ifndef GA_FITNESS_UTILS_H
 #define GA_FITNESS_UTILS_H
 
+#include <algorithm>
 #include <cfloat>
 #include <cmath>
 #include <vector>
@@ -46,6 +47,32 @@ inline std::vector<double> selectionWeights(
             (static_cast<long double>(fitness[i]) - minValid) / range);
     }
     return weights;
+}
+
+inline std::vector<std::vector<double>> replaceWithElite(
+    const std::vector<std::vector<double>>& population,
+    const std::vector<double>& fitness,
+    const std::vector<std::vector<double>>& offspring,
+    bool elitism) {
+    if (!elitism || population.empty() || offspring.empty()) {
+        return offspring;
+    }
+
+    int bestIndex = -1;
+    const size_t count = std::min(population.size(), fitness.size());
+    for (size_t i = 0; i < count; ++i) {
+        if (!isValid(fitness[i])) continue;
+        if (bestIndex < 0 || fitness[i] > fitness[bestIndex]) {
+            bestIndex = static_cast<int>(i);
+        }
+    }
+    if (bestIndex < 0) return offspring;
+
+    // 先完整保留 offspring，再用上一代精英覆盖固定位置。上一代精英的
+    // 索引与 offspring 的索引没有语义关系，不能据此跳过某个后代。
+    std::vector<std::vector<double>> nextPopulation = offspring;
+    nextPopulation[0] = population[bestIndex];
+    return nextPopulation;
 }
 
 }  // namespace GAFitnessUtils

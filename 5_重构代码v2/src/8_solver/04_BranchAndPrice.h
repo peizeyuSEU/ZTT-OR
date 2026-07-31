@@ -6,6 +6,7 @@
 #include "../10_common/Solution.h"
 #include "../10_common/Config.h"
 #include "../10_common/ExactWKey.h"
+#include "../10_common/CertifiedCache.h"
 #include "../4_logger/Logger.h"
 #include "../3_monitor/Monitor.h"
 #include "../7_formula/06_CarbonCredit.h"
@@ -60,7 +61,7 @@ private:
     long long accDbgIntCheckCalls_ = 0;
     long long accDbgFillCalls_ = 0;
 
-    // 缓存：对相同的w向量直接返回已计算的适应度
+    // 精确缓存：仅对相同 w 复用已认证最优的整数结果。
     struct CacheEntry {
         double profit;
         Solution sol;
@@ -97,7 +98,7 @@ public:
             std::cout << "\n  ========== [环节2/5] 分支定价 BP（固定 w_j 下精确求解整数规划） ==========" << std::endl;
             std::cout << "    设计: 列生成(求 LP 松弛) + 分支定界(恢复整数) = 分支定价" << std::endl;
             std::cout << "    收尾: 内层列利润已包含减排投资成本；BP整数结果完成后仅加回碳配额常数收益" << std::endl;
-            std::cout << "    优化: fitnessCache 以 w 向量为键去重，重复 w 直接返回历史利润(避免重算整棵搜索树)" << std::endl;
+            std::cout << "    优化: fitnessCache 仅复用相同 w 的认证最优结果；未认证结果再次出现时重算" << std::endl;
             std::cout << "    投资成本模型: "
                       << (cfg.use_sqrt_investment
                               ? "½δw²D^γ, γ=" + std::to_string(
@@ -248,12 +249,15 @@ public:
             }
         }
 
-        // 存入缓存
+        // 只有固定 w 下已认证最优的整数结果才能跨调用复用。
+        // 限时、节点/gap限制、未完成CG及其他未认证结果只服务于本次评估，
+        // 后续遇到相同 w 必须重新求解。
         CacheEntry entry;
         entry.profit = result;
         entry.sol = lastSolution_;
-        // 以原始 w 的 key 写入，保证本次调用（及完全相同的 w）能命中。
-        fitnessCache[key] = entry;
+        CertifiedCache::store(
+            fitnessCache, key, entry, lastSolution_.solveStatus,
+            lastSolution_.hasIntegerSolution);
 
         auto end = std::chrono::steady_clock::now();
         bpTime += std::chrono::duration<double>(end - start).count();

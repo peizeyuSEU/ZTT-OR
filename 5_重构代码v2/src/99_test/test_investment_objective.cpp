@@ -1,4 +1,5 @@
 #include "../10_common/Config.h"
+#include "../10_common/CertifiedCache.h"
 #include "../10_common/ExactWKey.h"
 #include "../10_common/GAFitnessUtils.h"
 #include "../10_common/SolveDeadline.h"
@@ -24,6 +25,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -265,6 +267,65 @@ int main() {
                 "an all-failed GA generation received selection weight");
         }
 
+        std::unordered_map<std::string, double> certifiedCache;
+        const SolveStatus uncertifiedStatuses[] = {
+            SolveStatus::TIME_LIMIT,
+            SolveStatus::NODE_LIMIT,
+            SolveStatus::GAP_LIMIT,
+            SolveStatus::CG_ITERATION_LIMIT,
+            SolveStatus::FEASIBLE_NOT_PROVEN,
+            SolveStatus::ERROR};
+        for (SolveStatus status : uncertifiedStatuses) {
+            if (CertifiedCache::store(
+                    certifiedCache, std::string("same_w"), 12.0,
+                    status, true)) {
+                throw std::runtime_error(
+                    "uncertified BP result entered the exact cache");
+            }
+        }
+        if (CertifiedCache::store(
+                certifiedCache, std::string("same_w"), 12.0,
+                SolveStatus::OPTIMAL, false)
+            || !certifiedCache.empty()) {
+            throw std::runtime_error(
+                "a result without an integer solution entered the cache");
+        }
+        if (!CertifiedCache::store(
+                certifiedCache, std::string("same_w"), 42.0,
+                SolveStatus::OPTIMAL, true)
+            || certifiedCache.find("same_w") == certifiedCache.end()
+            || certifiedCache.at("same_w") != 42.0) {
+            throw std::runtime_error(
+                "a certified optimal result did not enter or hit the cache");
+        }
+
+        const std::vector<std::vector<double>> oldPopulation = {
+            {0.0, 0.0}, {1.0, 0.0}, {1.0, 1.0}};
+        const std::vector<std::vector<double>> completeOffspring = {
+            {0.0, 1.0}, {0.25, 0.25}, {0.75, 0.75}};
+        const std::vector<std::vector<double>> elitePopulation =
+            GAFitnessUtils::replaceWithElite(
+                oldPopulation,
+                {std::numeric_limits<double>::quiet_NaN(), 5.0, 10.0},
+                completeOffspring, true);
+        if (elitePopulation.size() != completeOffspring.size()
+            || elitePopulation[0] != oldPopulation[2]
+            || elitePopulation[1] != completeOffspring[1]
+            || elitePopulation[2] != completeOffspring[2]) {
+            throw std::runtime_error(
+                "elitism discarded an offspring based on the old best index");
+        }
+        const std::vector<std::vector<double>> allFailedReplacement =
+            GAFitnessUtils::replaceWithElite(
+                oldPopulation,
+                {-DBL_MAX, std::numeric_limits<double>::quiet_NaN(),
+                 std::numeric_limits<double>::infinity()},
+                completeOffspring, true);
+        if (allFailedReplacement != completeOffspring) {
+            throw std::runtime_error(
+                "all-failed fitness corrupted the offspring population");
+        }
+
         const std::vector<double> exactW = {0.5, 0.0};
         const std::vector<double> adjacentW = {
             std::nextafter(0.5, 1.0), 0.0};
@@ -322,6 +383,48 @@ int main() {
         if (naCount != 6) {
             throw std::runtime_error(
                 "no-solution summary row contains fabricated decisions");
+        }
+
+        Monitor noSolutionMonitor;
+        noSolutionMonitor.reportBBNodes(4, 1, 7, 3);
+        if (noSolutionMonitor.totalBranchNodes() != 4
+            || noSolutionMonitor.prunedNodes() != 1
+            || noSolutionMonitor.processedNodes() != 7
+            || noSolutionMonitor.remainingActiveNodes() != 3) {
+            throw std::runtime_error(
+                "processed, pruned, and remaining nodes were conflated");
+        }
+        ResultWriter noSolutionWriter;
+        Config noSolutionConfig;
+        noSolutionConfig.num_dc = 1;
+        noSolutionConfig.num_retailers = 3;
+        noSolutionConfig.run_mode = "fixed_w";
+        noSolutionWriter.setConfigMeta(noSolutionConfig);
+        noSolutionWriter.collectFrom(
+            noSolutionMonitor, {0.6}, 123.0, 0.0, 1.0, 0, 0, 4, 0,
+            100.0);
+        Solution noIntegerSolution;
+        noIntegerSolution.solveStatus = SolveStatus::TIME_LIMIT;
+        noIntegerSolution.hasIntegerSolution = false;
+        noSolutionWriter.setSolveCertification(noIntegerSolution);
+        Instance noSolutionInstance = makeInstance();
+        noSolutionInstance.C = 100.0;
+        const std::string noSolutionReport =
+            "test_no_solution_report.tmp";
+        noSolutionWriter.saveReport(
+            noSolutionReport, noSolutionInstance, {0.6}, 0.0,
+            noSolutionConfig);
+        std::ifstream reportInput(noSolutionReport);
+        std::stringstream reportBuffer;
+        reportBuffer << reportInput.rdbuf();
+        reportInput.close();
+        std::remove(noSolutionReport.c_str());
+        const std::string reportText = reportBuffer.str();
+        if (reportText.find(" e+: ") != std::string::npos
+            || reportText.find(" e-: ") != std::string::npos
+            || reportText.find("  DC 0:\n") != std::string::npos) {
+            throw std::runtime_error(
+                "no-solution report contains fabricated carbon or DC data");
         }
 
         const Instance inst = makeInstance();
@@ -422,6 +525,19 @@ int main() {
                                + std::to_string(algorithm),
                            1e-7);
             }
+        }
+
+        SolveDeadline expiredPricingDeadline(0.000001);
+        while (!expiredPricingDeadline.expired()) {
+        }
+        PricingSolver timedPricingSolver;
+        timedPricingSolver.setInstance(inst);
+        timedPricingSolver.setConfig(paper);
+        PricingResult timedPricing = timedPricingSolver.solve(
+            0, dual, nullptr, &expiredPricingDeadline);
+        if (timedPricing.completed) {
+            throw std::runtime_error(
+                "pricing ignored an expired shared BP deadline");
         }
 
         // Deterministic randomized exhaustive regression.  This is broad
@@ -588,12 +704,19 @@ int main() {
                      "inner-BP certification.\n";
         std::cout << "PASS: failed GA fitness values cannot corrupt roulette "
                      "selection weights.\n";
+        std::cout << "PASS: only certified optimal inner-BP results enter "
+                     "exact fitness caches.\n";
+        std::cout << "PASS: elitism preserves all offspring except the fixed "
+                     "elite replacement slot.\n";
         std::cout << "PASS: BP fitness cache keys distinguish adjacent double "
                      "w values.\n";
         std::cout << "PASS: cooperative solve deadlines expire and disabled "
                      "deadlines remain inert.\n";
         std::cout << "PASS: no-solution text summaries report decision and "
                      "carbon fields as N/A.\n";
+        std::cout << "PASS: no-solution reports omit carbon/DC decisions and "
+                     "node outcome counters stay separate.\n";
+        std::cout << "PASS: pricing honors an expired shared BP deadline.\n";
         std::cout << "PASS: exhaustive service-set check (8/8).\n";
         std::cout << "PASS: post-deduction legacy ranking can select a different "
                      "service set.\n";
