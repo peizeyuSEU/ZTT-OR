@@ -5,6 +5,7 @@
 #include "../10_common/Types.h"
 #include "../10_common/Solution.h"
 #include "../10_common/Config.h"
+#include "../10_common/ExactWKey.h"
 #include "../4_logger/Logger.h"
 #include "../3_monitor/Monitor.h"
 #include "../7_formula/06_CarbonCredit.h"
@@ -320,18 +321,10 @@ public:
     int getIntegerSolutions() const { return bnb.getIntegerSolutions(); }
 
 private:
-    // 以 w 向量生成缓存键：将每个分量按 1e-4 精度离散化后拼接。
-    // 用 std::lround 做四舍五入（而非 static_cast<int> 向零截断），
-    // 避免 GA 解码产生的浮点值（如 0.34 存为 0.339999...）在整数边界附近
-    // 被截断到相邻桶，导致等价的 w 生成不同 key、拉低缓存命中率。
-    // 负值/越界值被 clamp 到 [0,1]，防御异常输入。
+    // 以每个 double 的完整位模式生成缓存键；仅规范化数学上等价的 +0/-0。
+    // 缓存不再依赖 GA 当前编码位数，也不会合并相近但不相同的连续 w。
     static std::string makeKey(const std::vector<double>& w) {
-        std::string key;
-        for (double v : w) {
-            double clamped = v < 0.0 ? 0.0 : (v > 1.0 ? 1.0 : v);
-            key += std::to_string(std::lround(clamped * 10000)) + ",";
-        }
-        return key;
+        return ExactWKey::make(w);
     }
 
     static std::string wToString(const std::vector<double>& w) {

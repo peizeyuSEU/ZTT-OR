@@ -190,11 +190,15 @@ private:
 
         // 后处理（计时）
         auto postStart = steady_clock::now();
-        PostProcessor postProc(*instance_, bestSolution, bestW);
-        postProc.compute();
+        std::unique_ptr<PostProcessor> postProc;
+        double emission = 0.0;
+        if (bestSolution.hasIntegerSolution) {
+            postProc.reset(new PostProcessor(*instance_, bestSolution, bestW));
+            postProc->compute();
+            emission = postProc->getCarbonResult().E;
+        }
         auto postEnd = steady_clock::now();
         double postTime = duration<double>(postEnd - postStart).count();
-        double emission = postProc.getCarbonResult().E;
         monitor_.reportPostTiming(postTime);
 
         // 输出结果
@@ -209,7 +213,7 @@ private:
                       ga.getFitnessEvaluationFailures());
 
         // 后处理明细（逐 DC 的 w/p/D/Q* + 碳交易 e±）打到终端
-        postProc.print();
+        if (postProc) postProc->print();
 
         // 打印时间分布报告（终端 + run.log 同步）
         emitTimingAndSummary();
@@ -332,15 +336,16 @@ private:
         std::cout << "统一结果表已保存至: " << resultCsvFile << std::endl;
 
         // 控制台输出摘要
+        const ExperimentResult& reported = resultWriter_.getResult();
         std::cout << "\n========== 最终结果 ==========" << std::endl;
-        std::cout << "求解状态: " << solveStatusName(sol.solveStatus) << std::endl;
-        std::cout << "结果分类: "
-                  << solveOutcomeName(sol.solveStatus,
-                                      sol.hasIntegerSolution)
-                  << std::endl;
+        std::cout << "Overall outcome: "
+                  << overallOutcomeName(reported) << std::endl;
+        std::cout << "Final inner-BP status: "
+                  << solveStatusName(sol.solveStatus) << std::endl;
         if (sol.bestBound < DBL_MAX / 2) {
-            std::cout << "有效上界: " << sol.bestBound
-                      << " | 相对Gap: " << sol.relativeGap << std::endl;
+            std::cout << "Final inner-BP bound: " << sol.bestBound
+                      << " | Final inner-BP gap: " << sol.relativeGap
+                      << std::endl;
         }
         if (sol.hasIntegerSolution) {
             std::cout << "总利润: " << profit << std::endl;

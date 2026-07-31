@@ -128,4 +128,13 @@ struct ExperimentResult {
     std::vector<ConvergencePoint> convergence;
 };
 
+inline std::string overallOutcomeName(const ExperimentResult& result) {
+    if (result.runMode == "ga") {
+        return result.hasIntegerSolution
+                   ? "HEURISTIC_BEST_FOUND"
+                   : "NO_FEASIBLE_SOLUTION_FOUND";
+    }
+    return solveOutcomeName(result.solveStatus, result.hasIntegerSolution);
+}
+
 #endif // EXPERIMENT_RESULT_H

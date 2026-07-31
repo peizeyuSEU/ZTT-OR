@@ -193,11 +193,9 @@ public:
         file << "    定价算法: " << algo_name << "\n\n";
 
         file << "求解认证:\n";
-        file << "  状态: " << solveStatusName(result_.solveStatus) << "\n";
-        file << "  结果分类: "
-             << solveOutcomeName(result_.solveStatus,
-                                 result_.hasIntegerSolution)
-             << "\n";
+        file << "  Overall outcome: " << overallOutcomeName(result_) << "\n";
+        file << "  Final inner-BP status: "
+             << solveStatusName(result_.solveStatus) << "\n";
         file << "  存在整数可行解: "
              << (result_.hasIntegerSolution ? "是" : "否") << "\n";
         if (result_.hasIntegerSolution) {
@@ -205,17 +203,21 @@ public:
                  << result_.totalProfit << "\n";
         }
         if (result_.bestBound < DBL_MAX / 2) {
-            file << "  有效上界: " << result_.bestBound << "\n";
+            file << "  Final inner-BP bound: " << result_.bestBound << "\n";
         }
         if (result_.relativeGap < DBL_MAX / 2) {
-            file << "  相对Gap: " << result_.relativeGap << "\n";
+            file << "  Final inner-BP gap: " << result_.relativeGap << "\n";
         }
         file << "\n";
 
         if (result_.hasIntegerSolution) {
-            file << (result_.solveStatus == SolveStatus::OPTIMAL
-                         ? "认证最优解汇总:\n"
-                         : "最好可行解汇总:\n");
+            if (result_.runMode == "ga") {
+                file << "GA启发式最好解汇总:\n";
+            } else {
+                file << (result_.solveStatus == SolveStatus::OPTIMAL
+                             ? "认证最优解汇总:\n"
+                             : "最好可行解汇总:\n");
+            }
             file << "  总利润: " << std::fixed << std::setprecision(2)
                  << result_.totalProfit << "\n";
             file << "  总碳排放: " << result_.carbonEmission << "\n";
@@ -347,13 +349,7 @@ public:
         file << std::setprecision(15);
         for (const auto& r : results) {
             file << csvEscape(r.experimentName) << ","
-                 << (r.runMode == "ga"
-                         ? (r.hasIntegerSolution
-                                ? "HEURISTIC_BEST_FOUND"
-                                : "NO_FEASIBLE_SOLUTION_FOUND")
-                         : solveOutcomeName(
-                               r.solveStatus, r.hasIntegerSolution))
-                 << ","
+                 << overallOutcomeName(r) << ","
                  << solveStatusName(r.solveStatus) << ","
                  << (r.hasIntegerSolution ? 1 : 0) << ","
                  << csvEscape(r.runMode) << ","
@@ -435,7 +431,7 @@ public:
             file << std::left << std::fixed << std::setprecision(2);
             file << std::setw(16) << r.experimentName
                  << std::setw(30)
-                 << solveOutcomeName(r.solveStatus, r.hasIntegerSolution)
+                 << overallOutcomeName(r)
                  << std::setw(6) << r.numDC
                  << std::setw(6) << r.numRetailers
                  << std::setw(16) << r.totalProfit

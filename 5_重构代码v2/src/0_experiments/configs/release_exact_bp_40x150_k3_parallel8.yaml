@@ -1,0 +1,45 @@
+plan_name: "release_exact_bp_40x150_k3_parallel8"
+plan_desc: "Exact BP candidate: Algorithm 3, lossless Top-K=3 pricing, 8-thread DC parallelism, strict CG."
+
+num_dc: 40
+num_retailers: 150
+random_seed: 32501
+run_mode: fixed_w
+
+use_sqrt_investment: true
+investment_exponent: 0.5
+use_invest_in_column: true
+
+# Algorithm 3 is the exact pricing oracle.
+pricing_algorithm: 1
+
+# K=3 adds up to three unique positive columns while retaining the globally
+# best reduced-cost column and the exact termination test.
+pricing_max_cols_per_dc: 3
+pricing_adaptive_cols: false
+pricing_per_dc_by_w: false
+
+# Pricing problems for distinct DCs are independent.
+parallel_fitness: false
+parallel_pricing: true
+pricing_threads: 8
+core_budget: 8
+cplex_threads: 1
+
+# These heuristics only provide valid integer incumbents.
+root_heuristic: true
+root_rmp_mip_heuristic: true
+root_rmp_mip_time_limit_sec: 5
+
+# Strict fixed-w certification. Limited runs must report incumbent, bound,
+# gap, and the actual termination status.
+max_cg_iterations: 1000
+cg_early_stop: false
+max_branch_nodes: 10000
+bb_node_strategy: dfs
+bp_time_limit_sec: 600
+bp_relative_gap: 0
+
+experiments:
+  - name: "release_exact_bp_40x150_k3_parallel8_w00"
+    fixed_w: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

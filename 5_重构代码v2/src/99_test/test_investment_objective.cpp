@@ -1,5 +1,8 @@
 #include "../10_common/Config.h"
+#include "../10_common/ExactWKey.h"
+#include "../10_common/GAFitnessUtils.h"
 #include "../10_common/Instance.h"
+#include "../5_result/ExperimentResult.h"
 #include "../7_formula/01_Revenue.h"
 #include "../7_formula/02_FacilityCost.h"
 #include "../7_formula/03_TransportCost.h"
@@ -12,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <iostream>
+#include <limits>
 #include <random>
 #include <sstream>
 #include <stdexcept>
@@ -202,6 +206,72 @@ int main() {
                    SolveStatus::CG_ITERATION_LIMIT, false))
                 != "INCOMPLETE_CG_NO_INCUMBENT") {
             throw std::runtime_error("solve outcome classification failed");
+        }
+
+        ExperimentResult gaResult;
+        gaResult.runMode = "ga";
+        gaResult.solveStatus = SolveStatus::OPTIMAL;
+        gaResult.hasIntegerSolution = true;
+        if (overallOutcomeName(gaResult) != "HEURISTIC_BEST_FOUND") {
+            throw std::runtime_error(
+                "GA overall outcome was confused with inner-BP optimality");
+        }
+        gaResult.hasIntegerSolution = false;
+        if (overallOutcomeName(gaResult)
+            != "NO_FEASIBLE_SOLUTION_FOUND") {
+            throw std::runtime_error(
+                "GA without an incumbent received an incorrect outcome");
+        }
+        ExperimentResult fixedWResult;
+        fixedWResult.runMode = "fixed_w";
+        fixedWResult.solveStatus = SolveStatus::OPTIMAL;
+        fixedWResult.hasIntegerSolution = true;
+        if (overallOutcomeName(fixedWResult) != "OPTIMAL_CERTIFIED") {
+            throw std::runtime_error(
+                "fixed-w optimal certification was not preserved");
+        }
+
+        const std::vector<double> partialFailureFitness = {
+            100.0, -DBL_MAX, 200.0,
+            std::numeric_limits<double>::quiet_NaN()};
+        const std::vector<double> partialWeights =
+            GAFitnessUtils::selectionWeights(partialFailureFitness);
+        if (partialWeights.size() != 4
+            || partialWeights[0] != 0.0
+            || partialWeights[1] != 0.0
+            || partialWeights[2] != 1.0
+            || partialWeights[3] != 0.0) {
+            throw std::runtime_error(
+                "failed GA fitness values received selection weight");
+        }
+        const std::vector<double> equalValidWeights =
+            GAFitnessUtils::selectionWeights(
+                {123.0, -DBL_MAX, 123.0});
+        if (equalValidWeights[0] != 1.0
+            || equalValidWeights[1] != 0.0
+            || equalValidWeights[2] != 1.0) {
+            throw std::runtime_error(
+                "equal valid GA fitness values were not selected uniformly");
+        }
+        const std::vector<double> noValidWeights =
+            GAFitnessUtils::selectionWeights(
+                {-DBL_MAX, std::numeric_limits<double>::infinity()});
+        if (noValidWeights[0] != 0.0 || noValidWeights[1] != 0.0) {
+            throw std::runtime_error(
+                "an all-failed GA generation received selection weight");
+        }
+
+        const std::vector<double> exactW = {0.5, 0.0};
+        const std::vector<double> adjacentW = {
+            std::nextafter(0.5, 1.0), 0.0};
+        if (ExactWKey::make(exactW) == ExactWKey::make(adjacentW)) {
+            throw std::runtime_error(
+                "exact w cache key merged adjacent double values");
+        }
+        if (ExactWKey::make(exactW) != ExactWKey::make(exactW)
+            || ExactWKey::make({0.0}) != ExactWKey::make({-0.0})) {
+            throw std::runtime_error(
+                "exact w cache key is not deterministic");
         }
 
         const Instance inst = makeInstance();
@@ -464,6 +534,12 @@ int main() {
                      "paper-model column coefficient.\n";
         std::cout << "PASS: solve statuses map to explicit certified/limited "
                      "outcome categories.\n";
+        std::cout << "PASS: GA overall outcomes remain distinct from final "
+                     "inner-BP certification.\n";
+        std::cout << "PASS: failed GA fitness values cannot corrupt roulette "
+                     "selection weights.\n";
+        std::cout << "PASS: BP fitness cache keys distinguish adjacent double "
+                     "w values.\n";
         std::cout << "PASS: exhaustive service-set check (8/8).\n";
         std::cout << "PASS: post-deduction legacy ranking can select a different "
                      "service set.\n";

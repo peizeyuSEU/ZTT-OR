@@ -6,6 +6,7 @@
 #include "../10_common/Solution.h"
 #include "../10_common/Config.h"
 #include "../10_common/Random.h"
+#include "../10_common/GAFitnessUtils.h"
 #include "../3_monitor/Monitor.h"
 #include "../4_logger/Logger.h"
 #include "../10_common/ThreadPool.h"
@@ -229,22 +230,43 @@ public:
             std::vector<double> fitness = calculateFitness(population, gen);
 
             // 2b. 统计
-            double genBest = fitness[0];
-            double genWorst = fitness[0];
-            double genSum = 0.0;
-            for (size_t i = 0; i < fitness.size(); i++) {
-                genSum += fitness[i];
-                if (fitness[i] > genBest) genBest = fitness[i];
-                if (fitness[i] < genWorst) genWorst = fitness[i];
+            std::vector<int> validFitnessIndices;
+            validFitnessIndices.reserve(fitness.size());
+            for (size_t i = 0; i < fitness.size(); ++i) {
+                if (GAFitnessUtils::isValid(fitness[i])) {
+                    validFitnessIndices.push_back(static_cast<int>(i));
+                }
             }
-            double genAvg = genSum / fitness.size();
+            if (validFitnessIndices.empty()) {
+                const std::string message =
+                    "GA generation has no valid fitness value; "
+                    "terminating without a feasible solution.";
+                if (logger) {
+                    logger->progress(0, message);
+                } else {
+                    std::cerr << message << std::endl;
+                }
+                break;
+            }
+
+            double genBest = fitness[validFitnessIndices.front()];
+            double genWorst = genBest;
+            long double genSum = 0.0L;
+            for (int index : validFitnessIndices) {
+                const double value = fitness[index];
+                genSum += static_cast<long double>(value);
+                if (value > genBest) genBest = value;
+                if (value < genWorst) genWorst = value;
+            }
+            double genAvg = static_cast<double>(
+                genSum / static_cast<long double>(validFitnessIndices.size()));
 
             // 2c. 更新全局最优
             int bestIdx = -1;
-            for (size_t i = 0; i < fitness.size(); i++) {
-                if (fitness[i] > bestFitness) {
-                    bestFitness = fitness[i];
-                    bestIdx = (int)i;
+            for (int index : validFitnessIndices) {
+                if (fitness[index] > bestFitness) {
+                    bestFitness = fitness[index];
+                    bestIdx = index;
                 }
             }
 
@@ -282,6 +304,8 @@ public:
                     << "代数 " << gen << ": Best=" << bestFitness
                     << ", Avg=" << genAvg
                     << ", Worst=" << genWorst
+                    << ", Valid=" << validFitnessIndices.size()
+                    << "/" << fitness.size()
                     << ", 耗时=" << genTime << "s";
 
             if (config->early_stop && noImproveCount > 0) {
@@ -372,12 +396,17 @@ public:
 
         std::cout << "\n========== 遗传算法完成 ==========" << std::endl;
         std::cout << "总耗时: " << totalTime << "s" << std::endl;
-        std::cout << "最优适应度: " << std::fixed << std::setprecision(2) << bestFitness << std::endl;
-        std::cout << "最优w: ";
-        for (int j = 0; j < inst->numDC; j++) {
-            std::cout << "w" << j << "=" << bestW[j] << " ";
+        if (GAFitnessUtils::isValid(bestFitness)) {
+            std::cout << "最优适应度: " << std::fixed
+                      << std::setprecision(2) << bestFitness << std::endl;
+            std::cout << "最优w: ";
+            for (int j = 0; j < inst->numDC; j++) {
+                std::cout << "w" << j << "=" << bestW[j] << " ";
+            }
+            std::cout << std::endl;
+        } else {
+            std::cout << "未获得有效适应度。" << std::endl;
         }
-        std::cout << std::endl;
 
         // ===== 4. 上报时间统计到 Monitor =====
         if (monitor) {
@@ -452,6 +481,14 @@ public:
             } else {
                 std::cout << rep.str() << std::endl;
             }
+        }
+
+        if (!GAFitnessUtils::isValid(bestFitness)) {
+            bestSolution = Solution();
+            bestSolution.solveStatus = SolveStatus::ERROR;
+            bestSolution.hasIntegerSolution = false;
+            bestSolution.w = bestW;
+            return bestSolution;
         }
 
         // ===== 5. 用最优w重新求解，输出详细结果 =====
@@ -978,16 +1015,13 @@ private:
         const std::vector<double>& realFitness) {
 
         int popSize = pop.size();
-        std::vector<double> fitness(popSize);
-        double minFitness = *std::min_element(realFitness.begin(), realFitness.end());
-        for (int i = 0; i < popSize; i++) {
-            fitness[i] = std::max(0.0, realFitness[i] - minFitness);
-        }
+        std::vector<double> fitness =
+            GAFitnessUtils::selectionWeights(realFitness);
 
         double totalFitness = std::accumulate(fitness.begin(), fitness.end(), 0.0);
         if (totalFitness < 1e-15) {
-            std::fill(fitness.begin(), fitness.end(), 1.0);
-            totalFitness = popSize;
+            throw std::runtime_error(
+                "Parent selection received no valid fitness value");
         }
 
         int geneLength = pop[0].size();
@@ -996,13 +1030,23 @@ private:
         for (int i = 0; i < popSize; i++) {
             double spin = rng.uniform(0.0, totalFitness);
             double partialSum = 0.0;
+            int selected = -1;
             for (int j = 0; j < popSize; j++) {
                 partialSum += fitness[j];
-                if (partialSum >= spin) {
-                    parents[i] = pop[j];
+                if (fitness[j] > 0.0 && partialSum >= spin) {
+                    selected = j;
                     break;
                 }
             }
+            if (selected < 0) {
+                for (int j = popSize - 1; j >= 0; --j) {
+                    if (fitness[j] > 0.0) {
+                        selected = j;
+                        break;
+                    }
+                }
+            }
+            parents[i] = pop[selected];
         }
 
         return parents;

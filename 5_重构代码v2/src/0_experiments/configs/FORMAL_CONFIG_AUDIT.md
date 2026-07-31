@@ -1,6 +1,7 @@
 # 正式实验配置审计
 
-审计基线：`82a9c08`，2026-07-31。
+上一正式基线：`4865b9b`，2026-07-31。本文件随后与输出标签、GA失败鲁棒性
+和精确 `w` 缓存键修复一同更新；正式实验应以最终发布提交为准。
 
 ## 固定 w 精确 BP 白名单
 
@@ -18,10 +19,14 @@
 - `release_exact_baseline_30x100.yaml`
 - `release_ablation_30x100_w08_k_parallel.yaml`
 - `accelerated_exact_bp_40x150_k1.yaml`
+- `release_exact_bp_40x150_k3_parallel8.yaml`
 - `verify_parallel_pricing_30x100_w08.yaml`
 
-固定 w 的推荐资源配置为 Algorithm 3、K=3、8线程 DC 并行定价。若触发时间、
-节点或CG迭代上限，必须报告最好可行解、有效上界和gap，不能标记为最优。
+`accelerated_exact_bp_40x150_k1.yaml` 保留为 K=1 精确基线；
+`release_exact_bp_40x150_k3_parallel8.yaml` 是 Algorithm 3、K=3、8线程 DC
+并行定价的无损加速候选。K=3 保留全局最佳检验数列和精确终止检验，但是否更快
+仍须通过同实例正式对照确定。若触发时间、节点或CG迭代上限，必须报告最好可行解、
+有效上界和gap，不能标记为最优。
 
 ## 历史配置
 
