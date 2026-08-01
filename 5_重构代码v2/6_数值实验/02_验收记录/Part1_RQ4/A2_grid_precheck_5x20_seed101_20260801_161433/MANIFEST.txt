@@ -1,0 +1,34 @@
+experiment_name: A2_grid_search_bp_precheck_5x20_seed101
+experiment_type: runtime feasibility precheck
+formal_replication: false
+paper_statistics: excluded
+grid_size: 32768
+grid_formula: 8^5 = 2^15
+grid_enumeration: lexicographic grid_id 0..32767
+repository: peizeyuSEU/ZTT-OR
+branch: master
+code_commit: 0dd725354732f9b8011e9e7e8540e0e64a3ff223
+tag_object_sha: ee021f66c1ffebe373a1e5038a0bcbd1d863e622
+tag_target_commit: 0dd725354732f9b8011e9e7e8540e0e64a3ff223
+num_dc: 5
+num_retailers: 20
+random_seed: 101
+chromosome_length: 3
+levels_per_dc: 8
+parallel_grid_evaluation: true
+num_workers: 8
+parallel_pricing: false
+cplex_threads: 1
+start_time: 2026-08-01 16:14:33 +08:00
+end_time: 2026-08-01 16:26:10 +08:00
+external_wall_time_sec: 696.74
+user_time_sec: 5382.04
+system_time_sec: 164.20
+max_parent_rss_kb: 150136
+completed_combinations: 32768
+certified_optimal_combinations: 32768
+timeout_combinations: 0
+failed_combinations: 0
+result_directory: results/paper_experiments/part1_algorithm_validation/A2_grid_vs_ga_bp/precheck_seed101/grid_5x20_seed101_20260801_161433
+script: 6_数值实验/05_运行脚本/Part1_RQ4/A2/a2_grid_precheck.py
+solver_core_modified: false

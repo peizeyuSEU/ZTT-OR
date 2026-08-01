@@ -1,0 +1,31 @@
+experiment_name: A2_grid_search_bp_precheck_5x20_seed101
+experiment_type: runtime feasibility precheck
+formal_replication: false
+num_dc: 5
+num_retailers: 20
+random_seed: 101
+chromosome_length: 3
+grid_levels: [0, 1, 2, 3, 4, 5, 6, 7]
+grid_w_formula: k/7
+expected_combinations: 32768
+delta: 3000.0
+investment_exponent: 0.5
+carbon_price: 2.0
+carbon_cap: 100000.0
+pricing_algorithm: 0
+pricing_max_cols_per_dc: 3
+dual_smooth_alpha: 0.0
+rc_eps: 1.0e-6
+max_cg_iterations: 2000
+max_branch_nodes: 10000
+bp_time_limit_sec: 600.0
+bp_relative_gap: 0.0
+parallel_grid_evaluation: true
+num_workers: 8
+parallel_pricing: false
+cplex_threads: 1
+use_sqrt_investment: true
+use_invest_in_column: true
+transport_direct_distance: false
+cg_early_stop: false
+legacy_mode: false
