@@ -1,0 +1,105 @@
+metadata:
+  document_name: FORMAL_EXPERIMENT_MATRIX_PART1
+  status: FINAL_FROZEN
+  generated_at: 2026-08-01 15:27 +08:00
+  research_question: RQ4
+  source_commit: 0dd725354732f9b8011e9e7e8540e0e64a3ff223
+  source_tag: paper-exp-baseline-20260801
+  global_baseline: FORMAL_BASELINE_FINAL_20260801_1457.yaml
+  global_protocol: EXPERIMENT_PROTOCOL_FINAL_20260801_1457.md
+formal_random_seeds:
+- 101
+- 202
+- 303
+- 404
+- 505
+- 606
+- 707
+- 808
+- 909
+- 1010
+A1_cplex_vs_bp:
+  sizes:
+  - num_dc: 3
+    num_retailers: 5
+  - num_dc: 3
+    num_retailers: 10
+  - num_dc: 5
+    num_retailers: 10
+  fixed_w_uniform_levels:
+  - 0.0
+  - 0.4
+  - 0.8
+  replications_per_size_w: 10
+  methods:
+  - full_column_integer_master_cplex
+  - branch_and_price
+  base_comparisons: 90
+  method_runs: 180
+  acceptance:
+    objective_difference_tolerance: formal_numeric_tolerance
+    multiple_equivalent_optima_allowed: true
+A2_grid_vs_ga_bp:
+  primary_size:
+    num_dc: 5
+    num_retailers: 20
+  chromosome_length_override: 3
+  w_levels_exact:
+  - '0'
+  - 1/7
+  - 2/7
+  - 3/7
+  - 4/7
+  - 5/7
+  - 6/7
+  - '1'
+  grid_combinations: 32768
+  replications: 10
+  precheck:
+    required: true
+    random_seed: 101
+    formal_statistic: false
+  fallback_rule:
+    fallback_size:
+      num_dc: 4
+      num_retailers: 20
+    grid_combinations: 4096
+    allowed_only_before_formal_A2: true
+    requires_new_timestamped_matrix_version: true
+    do_not_mix_primary_and_fallback_results: true
+  interpretation_limit: Exact only over the common 3-bit discrete w space.
+A3_scalability:
+  sizes:
+  - num_dc: 3
+    num_retailers: 5
+  - num_dc: 3
+    num_retailers: 10
+  - num_dc: 5
+    num_retailers: 10
+  - num_dc: 5
+    num_retailers: 20
+  - num_dc: 5
+    num_retailers: 30
+  - num_dc: 10
+    num_retailers: 30
+  - num_dc: 15
+    num_retailers: 30
+  - num_dc: 15
+    num_retailers: 50
+  - num_dc: 20
+    num_retailers: 50
+  - num_dc: 30
+    num_retailers: 100
+  replications_per_size: 10
+  total_runs: 100
+  run_order: ascending_size
+  global_overrides:
+    chromosome_length: 10
+    delta: 3000.0
+    investment_exponent: 0.5
+directory_structure:
+  root: results/paper_experiments/part1_algorithm_validation
+  A1: A1_cplex_vs_bp
+  A2_precheck: A2_grid_vs_ga_bp/precheck_seed101
+  A2_formal: A2_grid_vs_ga_bp/formal
+  A3: A3_scalability

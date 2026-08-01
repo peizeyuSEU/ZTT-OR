@@ -1,0 +1,138 @@
+metadata:
+  document_name: FORMAL_BASELINE_FINAL
+  document_status: FROZEN_GLOBAL_BASELINE
+  generated_at: "2026-08-01 14:57 +08:00"
+  source_commit: "0dd725354732f9b8011e9e7e8540e0e64a3ff223"
+  source_tag: "paper-exp-baseline-20260801"
+  source_branch: "master"
+  purpose: >
+    Canonical global parameter specification for the formal paper experiments.
+    Experiment-specific dimensions, random_seed, and output paths must be
+    materialized explicitly for every run.
+  directly_runnable: false
+  required_experiment_overrides:
+    - num_dc
+    - num_retailers
+    - random_seed
+    - output_dir
+  seed_protocol_revision:
+    previous_working_format: "separate instance_seeds and ga_seeds"
+    formal_format: "one unified random_seed per replication"
+    reason: >
+      The frozen implementation exposes one random_seed field that jointly
+      controls synthetic-instance generation and the stochastic GA process.
+    impact: >
+      The earlier format was corrected before any formal ten-replication
+      experiment began; no formal result is affected.
+
+formal_random_seed_protocol:
+  replications: 10
+  random_seeds: [101, 202, 303, 404, 505, 606, 707, 808, 909, 1010]
+  pairing_rule: >
+    All compared scenarios and sensitivity levels use the same seed for the
+    same replication index.
+
+experiment_specific:
+  num_dc: EXPERIMENT_SPECIFIC
+  num_retailers: EXPERIMENT_SPECIFIC
+  random_seed: EXPERIMENT_SPECIFIC
+  output_dir: EXPERIMENT_SPECIFIC
+
+model_parameters:
+  carbon_price: 2.0
+  carbon_cap: 100000.0
+  inv_carbon_coeff: 2.0
+  transport_carbon_coeff: 0.01
+  fac_carbon_ratio: 0.1
+  delta: 3000.0
+  investment_exponent: 0.5
+  min_w: 0.0
+  max_w: 1.0
+  chromosome_length: 10
+  use_sqrt_investment: true
+  use_invest_in_column: true
+  transport_direct_distance: false
+  service_level: 0.975
+  z_alpha: 1.96
+
+instance_generation:
+  coord_min: 0.0
+  coord_max: 1000.0
+  supplier_x: 500.0
+  supplier_y: 500.0
+  mu_min: 2000.0
+  mu_max: 3500.0
+  var_min: 10.0
+  var_max: 15.0
+  fixed_cost_min: 7000.0
+  fixed_cost_max: 10000.0
+  reserve_price_min: 60.0
+  reserve_price_max: 80.0
+  order_fixed_cost: 100.0
+  transport_fixed_cost: 100.0
+  lead_time: 1.0
+  holding_cost: 10.0
+  synthetic_unit_convention: >
+    Synthetic experiments use consistent normalized monetary, distance,
+    demand, and emission units. Explicit physical units are required only
+    for the public-data case study.
+
+ga_parameters:
+  population_size: 30
+  max_generation: 50
+  crossover_rate: 0.7
+  mutation_rate: -1
+  mutation_rate_interpretation: "automatic 1 / total chromosome length"
+  elitism: true
+  early_stop: true
+  convergence_generations: 10
+  convergence_tolerance: 0.001
+  parallel_fitness: true
+  num_threads: 8
+  fitness_cache_policy: "certified optimal inner-BP results only"
+
+bp_parameters:
+  run_mode: "ga"
+  pricing_algorithm: 0
+  pricing_algorithm_description: >
+    Simplified candidate generation with exact Algorithm 3 verification.
+  pricing_max_cols_per_dc: 3
+  dual_smooth_alpha: 0.0
+  dual_smoothing_status: "disabled after repeated tests found no useful benefit"
+  rc_eps: 1.0e-6
+  max_cg_iterations: 2000
+  max_branch_nodes: 10000
+  bp_time_limit_sec: 600.0
+  bp_relative_gap: 0.0
+  cg_early_stop: false
+  use_dfs: true
+  root_heuristic: true
+  root_rmp_mip_heuristic: false
+  legacy_mode: false
+
+solver_parameters:
+  cplex_threads: 1
+  parallel_pricing: false
+  pricing_threads: 4
+  pricing_threads_note: >
+    Configured upper bound only; effective pricing execution is serial because
+    parallel_pricing is false.
+  cplex_optimality_tolerance: 1.0e-9
+  full_ga_internal_time_limit: null
+  full_ga_time_control: >
+    No dedicated internal full-GA time-limit field is used. Termination is
+    governed by max_generation, early stopping, and the 600-second per-BP limit.
+    Any external job wall-time must be recorded in the run manifest.
+
+output_and_audit_requirements:
+  save_resolved_configuration: true
+  required_files:
+    - config_used.yaml
+    - resolved_config.yaml
+    - run.log
+    - report.txt
+    - result.csv
+    - convergence.csv
+    - MANIFEST.txt
+  unknown_yaml_keys_must_be_rejected_by_audit: true
+  do_not_rely_on_implicit_defaults: true
