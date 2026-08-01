@@ -415,9 +415,9 @@ public:
             return fail("investment_exponent must satisfy 0 < gamma <= 1");
         }
         // D_j^gamma 依赖服务集合，不能在 BP 结束后再统一扣除。
-        if (use_sqrt_investment && !use_invest_in_column) {
+        if (!use_invest_in_column) {
             return fail(
-                "use_sqrt_investment=true requires use_invest_in_column=true");
+                "use_invest_in_column must be true");
         }
         if (!std::isfinite(coord_min) || !std::isfinite(coord_max)
             || coord_min > coord_max) {
@@ -433,7 +433,15 @@ public:
             || pricing_high_w_max_cols < 1) {
             return fail("all pricing column-count limits must be positive");
         }
-        if (bp_time_limit_sec < 0.0 || bp_relative_gap < 0.0) {
+        if (!std::isfinite(crossover_rate) || crossover_rate < 0.0
+            || crossover_rate > 1.0
+            || !std::isfinite(mutation_rate)
+            || (mutation_rate < 0.0 && mutation_rate != -1.0)
+            || mutation_rate > 1.0) {
+            return fail("crossover_rate and mutation_rate must lie in [0, 1]");
+        }
+        if (!std::isfinite(bp_time_limit_sec) || !std::isfinite(bp_relative_gap)
+            || bp_time_limit_sec < 0.0 || bp_relative_gap < 0.0) {
             return fail("bp_time_limit_sec and bp_relative_gap must be non-negative");
         }
         if (run_mode != "ga" && run_mode != "fixed_w") {

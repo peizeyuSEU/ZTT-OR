@@ -136,7 +136,11 @@ public:
         pricingThreads_ = pThreads;  // 始终记录设定线程数(供横幅展示)，与是否真正建池解耦。
         // 仅在"确实要并行"且多 DC、线程数>1 时才建池；串行(parallel_pricing=false)不浪费建池。
         // 线程数变化时重建，否则复用（幂等防重复建池）。
-        bool needPool = cfg.parallel_pricing && numDC > 1 && pThreads > 1;
+        // GA fitness uses forked processes; never create a thread pool before
+        // fork, even when an old comparison config requests both modes.
+        const bool effectiveParallelPricing =
+            cfg.parallel_pricing && !cfg.parallel_fitness;
+        bool needPool = effectiveParallelPricing && numDC > 1 && pThreads > 1;
         if (needPool) {
             if (!pricingPool_ ||
                 static_cast<int>(pricingPool_->size()) != pThreads) {
@@ -149,7 +153,7 @@ public:
         // ===== 环节配置横幅：CG + PS 层（第1层，最内核，只打印一次） =====
         static bool cgBannerPrinted = false;
         if (!cgBannerPrinted) {
-            bool parPricing = cfg.parallel_pricing && numDC > 1;
+            bool parPricing = effectiveParallelPricing && numDC > 1;
             std::cout << "\n      ========== [环节4/5] 列生成 CG（RMP + 定价子问题迭代求 LP 松弛） ==========" << std::endl;
             std::cout << "        设计: CPLEX 增量式 RMP(动态加列，不重建模型) ↔ 逐 DC 定价生成负 RC 新列" << std::endl;
             // 定价并行配置：无论是否启用，都完整展示线程/预算设定（未启用时仅不生效，便于核对配置）。
@@ -315,6 +319,7 @@ public:
         auto finishTimeLimit = [&]() -> CGResult {
             result.certifiedOptimal = false;
             result.timeLimitReached = true;
+            result.status = CGStatus::TIME_LIMIT;
             const auto end = std::chrono::steady_clock::now();
             cgTime += std::chrono::duration<double>(end - start).count();
             logNodeDiagnostic("TIME_LIMIT");
@@ -556,6 +561,9 @@ public:
                             logger->log(2, "RMP求解失败（不可行）");
                     }
                     result.feasible = false;
+                    result.status = (rmpStatus == IloAlgorithm::Infeasible)
+                                        ? CGStatus::INFEASIBLE_CERTIFIED
+                                        : CGStatus::SOLVER_ERROR;
                     auto end = std::chrono::steady_clock::now();
                     cgTime += std::chrono::duration<double>(end - start).count();
                     logNodeDiagnostic("RMP_INFEASIBLE");
@@ -568,6 +576,7 @@ public:
                 if (!CplexEnv::isOptimalStatus(rmpStatus)) {
                     result.feasible = true;
                     result.rmpOptimalityNotProven = true;
+                    result.status = CGStatus::RMP_NOT_OPTIMAL;
                     if (logger) {
                         const std::string msg =
                             "RMP未达到Optimal状态，停止CG且不读取对偶/不认证上界";
@@ -940,6 +949,7 @@ public:
                 // 4f. 收敛判断
                 if (positiveCols.empty()) {
                     result.certifiedOptimal = true;
+                    result.status = CGStatus::OPTIMAL;
                     if (logger) {
                         if (consoleProgress_)
                             logger->progress(2, "列生成收敛，共 " + std::to_string(totalIterations) + " 轮迭代");
@@ -1120,6 +1130,7 @@ public:
                     // 把这种停滞冒充收敛。
                     result.certifiedOptimal = false;
                     result.iterationLimitReached = true;
+                    result.status = CGStatus::ITERATION_LIMIT;
 #ifdef CG_DIAG
                     {
                         std::string timeMsg = "[DIAG-TIME] CG退出 iters="
@@ -1141,17 +1152,22 @@ public:
             }
 
         } catch (const IloException& ex) {
+            result.status = CGStatus::SOLVER_ERROR;
             std::cerr << "[ColumnGeneration] CPLEX异常: " << ex.getMessage() << std::endl;
             result.feasible = false;
+            return result;
         } catch (const std::exception& ex) {
+            result.status = CGStatus::SOLVER_ERROR;
             std::cerr << "[ColumnGeneration] 异常: " << ex.what() << std::endl;
             result.feasible = false;
+            return result;
             }
 
             // 达到迭代上限时，当前 RMP 解没有完成 reduced-cost 最优性认证。
             // 它不能作为分支定界节点的有效 LP 上界。
             result.iterationLimitReached = true;
             result.certifiedOptimal = false;
+            result.status = CGStatus::ITERATION_LIMIT;
             if (logger) {
                 logger->log(2, "列生成达到最大迭代次数，节点LP未完成最优性认证");
             }

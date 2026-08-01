@@ -12,7 +12,6 @@
 #include "../7_formula/06_CarbonCredit.h"
 #include "../7_formula/05_InvestmentCost.h"
 #include "../7_formula/04_InventoryCost.h"
-#include "02_ColumnGeneration.h"
 #include "03_BranchAndBound.h"
 #include <vector>
 #include <iostream>
@@ -34,7 +33,6 @@ private:
     const Config* config;
     Logger* logger;
     Monitor* monitor;
-    ColumnGeneration columnGen;
     BranchAndBound bnb;
     double bpTime;
 
@@ -83,20 +81,23 @@ public:
 
     void setInstance(const Instance& instance) {
         inst = &instance;
-        columnGen.setInstance(instance);
         bnb.setInstance(instance);
+        fitnessCache.clear();
+        lastSolution_ = Solution();
+        lastHitCache_ = false;
     }
 
     void setConfig(const Config& cfg) {
         // 需求相关投资成本 ½δw²D^γ 必须在列利润中扣除；事后扣除会
         // 改变服务集合排序，使 column generation 与最终目标不一致。
-        if (cfg.use_sqrt_investment && !cfg.use_invest_in_column) {
+        if (!cfg.use_invest_in_column) {
             throw std::invalid_argument(
                 "Demand-scaled investment cost must be included in columns");
         }
         config = &cfg;
-        columnGen.setConfig(cfg);
-        columnGen.setRCEps(cfg.rc_eps);
+        fitnessCache.clear();
+        lastSolution_ = Solution();
+        lastHitCache_ = false;
         bnb.setConfig(cfg);
 
         // ===== 环节配置横幅：BP 层（第3层，固定 w 下精确求解 IP，只打印一次） =====
@@ -119,7 +120,6 @@ public:
 
     void setLogger(Logger* log) {
         logger = log;
-        columnGen.setLogger(log);
         bnb.setLogger(log);
     }
 

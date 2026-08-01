@@ -1090,8 +1090,13 @@ private:
         const std::vector<std::vector<double>>& parents) {
 
         int popSize = parents.size();
+        if (popSize == 0) return {};
         int geneLength = parents[0].size();
         std::vector<std::vector<double>> offspring(popSize, std::vector<double>(geneLength));
+
+        if (geneLength < 2) {
+            return parents;
+        }
 
         for (int i = 0; i < popSize - 1; i += 2) {
             if (rng.uniform() < config->crossover_rate) {

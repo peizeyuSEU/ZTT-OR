@@ -19,6 +19,18 @@ enum class SolveStatus {
     ERROR
 };
 
+// Status of the column-generation oracle itself.  A non-optimal RMP or a
+// solver error must never be mistaken for a certified infeasible node.
+enum class CGStatus {
+    NOT_STARTED,
+    OPTIMAL,
+    INFEASIBLE_CERTIFIED,
+    TIME_LIMIT,
+    RMP_NOT_OPTIMAL,
+    ITERATION_LIMIT,
+    SOLVER_ERROR
+};
+
 inline const char* solveStatusName(SolveStatus status) {
     switch (status) {
         case SolveStatus::NOT_STARTED: return "NOT_STARTED";
@@ -81,6 +93,7 @@ struct CGResult {
     bool rmpOptimalityNotProven = false;
     bool iterationLimitReached = false;
     bool timeLimitReached = false;
+    CGStatus status = CGStatus::NOT_STARTED;
     std::vector<std::vector<double>> final_z_j;
     std::vector<std::vector<std::vector<int>>> j_S;
     std::vector<std::vector<double>> p_j;

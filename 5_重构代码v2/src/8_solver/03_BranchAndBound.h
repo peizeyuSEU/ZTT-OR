@@ -52,6 +52,7 @@ private:
     double bbTime;           // 分支定界耗时
     SolveStatus solveStatus;
     double finalRelativeGap;
+    bool consoleProgressEnabled_ = true;
 
     // 列生成结果缓存（避免重新生成列）
     struct BnBNode {
@@ -76,7 +77,10 @@ public:
     }
 
     /** 透传：控制 CG 迭代进度是否写终端（子进程并行时关掉，只写各自日志文件） */
-    void setConsoleProgress(bool on) { columnGen.setConsoleProgress(on); }
+    void setConsoleProgress(bool on) {
+        consoleProgressEnabled_ = on;
+        columnGen.setConsoleProgress(on);
+    }
 
     void setInstance(const Instance& instance) {
         inst = &instance;
@@ -165,11 +169,12 @@ public:
 
         const double kTimeLimitSec = config ? config->bp_time_limit_sec : 600.0;
         const double kGapTol = config ? std::max(0.0, config->bp_relative_gap) : 0.0;
+        const double boundEps = config ? std::max(0.0, config->rc_eps) : 1.0e-6;
         SolveDeadline deadline(kTimeLimitSec);
 
         // ===== 1. 求解根节点（输出进度到终端） =====
         BranchState rootState;
-        columnGen.setConsoleProgress(true);
+        columnGen.setConsoleProgress(consoleProgressEnabled_);
         // 根节点强制走严格收敛出口（forceStrict=true 禁用 tailing-off 早停），
         // 使 rootResult.lpObjective 成为严格 LP 上界，避免被早停低估。
         processedNodes++;
@@ -196,7 +201,9 @@ public:
         if (!rootResult.feasible) {
             // 根节点含全零方案，理论上不可能因模型不可行而没有整数解。
             // 因而此处是 RMP/CPLEX 失败，而非原问题不可行；保留空 incumbent。
-            solveStatus = SolveStatus::ERROR;
+            solveStatus = (rootResult.status == CGStatus::INFEASIBLE_CERTIFIED)
+                              ? SolveStatus::INFEASIBLE
+                              : SolveStatus::ERROR;
             bestSolution.solveStatus = solveStatus;
             bestSolution.bestBound = DBL_MAX;
             bestSolution.relativeGap = DBL_MAX;
@@ -414,7 +421,7 @@ public:
             nodeSelections++;
 
             // 剪枝检查：如果当前节点的LP解 ≤ bestLowerBound，则剪枝
-            if (currentNode.cgResult.lpObjective <= bestLowerBound + 1e-6) {
+            if (currentNode.cgResult.lpObjective <= bestLowerBound + boundEps) {
                 prunedNodes++;
                 continue;
             }
@@ -488,8 +495,13 @@ public:
                     remainingActiveNodes =
                         static_cast<int>(nodeStack.size()) + 2;
                     abortedByUncertifiedCG = true;
+                } else if (!childResult.feasible
+                    && childResult.status != CGStatus::INFEASIBLE_CERTIFIED) {
+                    solveStatus = SolveStatus::ERROR;
+                    remainingActiveNodes = static_cast<int>(nodeStack.size()) + 2;
+                    abortedByUncertifiedCG = true;
                 } else if (childResult.feasible
-                    && childResult.lpObjective > bestLowerBound + 1e-6) {
+                    && childResult.lpObjective > bestLowerBound + boundEps) {
                     nodeStack.emplace_back(childState, childResult);
                 } else {
                     prunedNodes++;
@@ -522,8 +534,13 @@ public:
                     remainingActiveNodes =
                         static_cast<int>(nodeStack.size()) + 1;
                     abortedByUncertifiedCG = true;
+                } else if (!childResult.feasible
+                    && childResult.status != CGStatus::INFEASIBLE_CERTIFIED) {
+                    solveStatus = SolveStatus::ERROR;
+                    remainingActiveNodes = static_cast<int>(nodeStack.size()) + 1;
+                    abortedByUncertifiedCG = true;
                 } else if (childResult.feasible
-                    && childResult.lpObjective > bestLowerBound + 1e-6) {
+                    && childResult.lpObjective > bestLowerBound + boundEps) {
                     nodeStack.emplace_back(childState, childResult);
                 } else {
                     prunedNodes++;
