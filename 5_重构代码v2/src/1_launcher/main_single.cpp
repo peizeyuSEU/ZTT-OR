@@ -13,8 +13,11 @@ static const std::string CONFIG_PATH =
 // ================================
 
 int main(int argc, char** argv) {
-    const std::string configPath =
-        argc > 1 ? std::string(argv[1]) : CONFIG_PATH;
+    if (argc < 2) {
+        std::cerr << "Usage: ga_bp <config.yaml>\n";
+        return 2;
+    }
+    const std::string configPath(argv[1]);
     Orchestrator orchestrator;
     orchestrator.initialize(configPath);
     orchestrator.run();

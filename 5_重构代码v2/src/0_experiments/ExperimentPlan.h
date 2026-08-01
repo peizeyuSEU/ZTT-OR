@@ -7,6 +7,7 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 
 /**
  * 实验方案解析
@@ -57,6 +58,12 @@ public:
                 // 去除首尾空格和引号
                 baseConfigPath_.erase(0, baseConfigPath_.find_first_not_of(" \t\""));
                 baseConfigPath_.erase(baseConfigPath_.find_last_not_of(" \t\"") + 1);
+                std::filesystem::path basePath(baseConfigPath_);
+                if (basePath.is_relative()) {
+                    baseConfigPath_ =
+                        (std::filesystem::path(yamlPath).parent_path() / basePath)
+                            .lexically_normal().string();
+                }
                 break;
             }
         }

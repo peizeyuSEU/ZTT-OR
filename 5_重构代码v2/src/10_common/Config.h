@@ -11,6 +11,8 @@
 #include <cctype>
 #include <cmath>
 #include <stdexcept>
+#include <iomanip>
+#include <limits>
 
 /**
  * 配置管理类
@@ -536,7 +538,9 @@ private:
     static bool toBool(const std::string& raw_value) {
         std::string v = trim(stripInlineComment(raw_value));
         std::transform(v.begin(), v.end(), v.begin(), ::tolower);
-        return v == "true" || v == "yes" || v == "1";
+        if (v == "true" || v == "yes" || v == "1") return true;
+        if (v == "false" || v == "no" || v == "0") return false;
+        throw std::invalid_argument("invalid boolean value: " + raw_value);
     }
 
     // ========== 字段设置（所有可配置字段的注册表）==========
@@ -669,6 +673,8 @@ private:
 
     /** 解析器与批量启动器共用的完整序列化入口。 */
     void writeYaml(std::ostream& out) const {
+        const std::streamsize oldPrecision = out.precision();
+        out << std::setprecision(std::numeric_limits<double>::max_digits10);
         out << "# Resolved experiment configuration (automatically generated)\n";
         out << "num_dc: " << num_dc << "\n";
         out << "num_retailers: " << num_retailers << "\n";
@@ -779,6 +785,7 @@ private:
         out << "legacy_mode: " << (legacy_mode ? "true" : "false") << "\n";
         out << "transport_direct_distance: "
             << (transport_direct_distance ? "true" : "false") << "\n";
+        out.precision(oldPrecision);
     }
 };
 
