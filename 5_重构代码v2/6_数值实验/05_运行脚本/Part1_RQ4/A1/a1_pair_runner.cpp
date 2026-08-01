@@ -12,6 +12,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <sys/resource.h>
 #include <vector>
 
 ILOSTLBEGIN
@@ -20,6 +21,7 @@ namespace fs = std::filesystem;
 struct Col { int dc; std::vector<int> S; double p; double profit; IloNumVar var; };
 
 static std::string csv(double x) { std::ostringstream o; o << std::setprecision(17) << x; return o.str(); }
+static long peakRssKb() { struct rusage u{}; getrusage(RUSAGE_SELF, &u); return (long)u.ru_maxrss; }
 
 static bool validateSol(const Instance& inst, const Solution& sol) {
     std::vector<int> used(inst.numRetailer, 0);
@@ -33,8 +35,10 @@ static bool validateSol(const Instance& inst, const Solution& sol) {
 }
 
 static double completeMaster(const Instance& inst, const Config& cfg, Solution& out,
-                             int& colCount, double& wall) {
+                             int& colCount, double& wall, double& enumTime,
+                             double& buildTime, double& optTime) {
     auto t0 = std::chrono::steady_clock::now();
+    auto stage = t0;
     IloEnv env; out = Solution(); colCount = 0;
     try {
         IloModel model(env); IloObjective obj = IloAdd(model, IloMaximize(env));
@@ -49,9 +53,14 @@ static double completeMaster(const Instance& inst, const Config& cfg, Solution& 
             for(int i=0;i<inst.numRetailer;++i) if(S[i]) c += rRows[i](1.0);
             IloNumVar v(c,0.0,1.0,ILOBOOL); vars.add(v); cols.push_back({j,S,p,formula.columnProfit(inst,j,S,p,inst.w[j]),v});
         }
-        colCount = (int)cols.size(); IloCplex cp(model); cp.setOut(env.getNullStream()); cp.setWarning(env.getNullStream());
+        enumTime=std::chrono::duration<double>(std::chrono::steady_clock::now()-stage).count();
+        stage=std::chrono::steady_clock::now(); colCount = (int)cols.size();
+        IloCplex cp(model); cp.setOut(env.getNullStream()); cp.setWarning(env.getNullStream());
+        buildTime=std::chrono::duration<double>(std::chrono::steady_clock::now()-stage).count();
         cp.setParam(IloCplex::Threads,1); cp.setParam(IloCplex::EpGap,0.0); cp.setParam(IloCplex::EpOpt,1e-9);
+        stage=std::chrono::steady_clock::now();
         if(!cp.solve() || cp.getStatus()!=IloAlgorithm::Optimal) throw std::runtime_error("CPLEX_NOT_OPTIMAL");
+        optTime=std::chrono::duration<double>(std::chrono::steady_clock::now()-stage).count();
         out.hasIntegerSolution=true; out.solveStatus=SolveStatus::OPTIMAL; out.totalProfit=cp.getObjValue(); out.w=inst.w;
         for(const auto& c: cols) if(cp.getValue(c.var)>0.5) { DCSolution d; d.dcIndex=c.dc; d.S=c.S; d.p=c.p; d.w=inst.w[c.dc]; d.profit=c.profit; out.dcSolutions.push_back(d); }
         env.end(); wall=std::chrono::duration<double>(std::chrono::steady_clock::now()-t0).count(); return out.totalProfit;
@@ -85,13 +94,25 @@ int main(int argc,char**argv){
         cfg.output_dir=argv[6]; fs::create_directories(cfg.output_dir); cfg.saveToFile(cfg.output_dir+"/resolved_config.yaml");
         DataGenerator gen(cfg.random_seed); gen.setLegacyMode(cfg.legacy_mode); Instance inst=gen.generate(cfg); inst.setEmissionReductionRates(cfg.fixed_w);
         std::ofstream f(cfg.output_dir+"/instance_fingerprint.txt"); f<<"num_dc="<<cfg.num_dc<<"\nnum_retailers="<<cfg.num_retailers<<"\nrandom_seed="<<cfg.random_seed<<"\nuniform_w="<<w<<"\n"; f.close();
-        Solution ref; int ncols=0; double cplexWall=0; double cobj=completeMaster(inst,cfg,ref,ncols,cplexWall); bool refFeas=validateSol(inst,ref);
-        BranchAndBound bp; bp.setInstance(inst); bp.setConfig(cfg); auto b0=std::chrono::steady_clock::now(); double bobj=bp.solve(); double bpWall=std::chrono::duration<double>(std::chrono::steady_clock::now()-b0).count(); const Solution& bs=bp.getBestSolution();
-        bool bpFeas=bs.hasIntegerSolution && validateSol(inst,bs); double absd=std::abs(cobj-bobj), reld=absd/std::max(1.0,std::abs(cobj));
-        std::ofstream r(cfg.output_dir+"/pair_result.csv"); r<<"num_dc,num_retailers,random_seed,fixed_w,complete_column_count,cplex_status,cplex_objective,cplex_gap,cplex_wall_time_sec,bp_status,bp_objective,bp_gap,bp_wall_time_sec,absolute_objective_difference,relative_objective_difference,reference_solution_feasible,bp_solution_feasible,bp_cg_iterations,bp_branch_nodes,bp_processed_nodes,bp_pruned_nodes,bp_remaining_active_nodes,pair_valid\n";
+        Solution ref; int ncols=0; double cplexWall=0, enumTime=0, buildTime=0, optTime=0;
+        double c0=std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();
+        double cobj=completeMaster(inst,cfg,ref,ncols,cplexWall,enumTime,buildTime,optTime);
+        auto rv0=std::chrono::steady_clock::now(); bool refFeas=validateSol(inst,ref);
+        double refValTime=std::chrono::duration<double>(std::chrono::steady_clock::now()-rv0).count();
+        cplexWall += refValTime;
+        long refRss=peakRssKb();
+        BranchAndBound bp; auto bi0=std::chrono::steady_clock::now(); bp.setInstance(inst); bp.setConfig(cfg);
+        double bpInitTime=std::chrono::duration<double>(std::chrono::steady_clock::now()-bi0).count();
+        auto b0=std::chrono::steady_clock::now(); double bobj=bp.solve(); double bpSolveTime=std::chrono::duration<double>(std::chrono::steady_clock::now()-b0).count(); const Solution& bs=bp.getBestSolution();
+        auto bv0=std::chrono::steady_clock::now(); bool bpFeas=bs.hasIntegerSolution && validateSol(inst,bs);
+        double bpValTime=std::chrono::duration<double>(std::chrono::steady_clock::now()-bv0).count();
+        double bpWall=bpInitTime+bpSolveTime+bpValTime;
+        double absd=std::abs(cobj-bobj), reld=absd/std::max(1.0,std::abs(cobj));
+        long bpRss=peakRssKb();
+        std::ofstream r(cfg.output_dir+"/pair_result.csv"); r<<"num_dc,num_retailers,random_seed,fixed_w,complete_column_count,column_enumeration_time_sec,full_master_build_time_sec,cplex_optimization_time_sec,reference_validation_time_sec,reference_total_wall_time_sec,reference_peak_rss_kb,bp_initialization_time_sec,bp_solve_time_sec,bp_validation_time_sec,bp_total_wall_time_sec,bp_peak_rss_kb,bp_initial_columns,bp_generated_columns,bp_final_master_columns,cplex_status,cplex_objective,cplex_gap,bp_status,bp_objective,bp_gap,absolute_objective_difference,relative_objective_difference,reference_solution_feasible,bp_solution_feasible,bp_cg_iterations,bp_branch_nodes,bp_processed_nodes,bp_pruned_nodes,bp_remaining_active_nodes,pair_valid\n";
         bool valid=refFeas && bpFeas && bp.getSolveStatus()==SolveStatus::OPTIMAL && absd<=1e-7*std::max(1.0,std::abs(cobj));
-        r<<cfg.num_dc<<","<<cfg.num_retailers<<","<<cfg.random_seed<<","<<csv(w)<<","<<ncols<<",OPTIMAL,"<<csv(cobj)<<",0,"<<csv(cplexWall)<<","<<solveOutcomeName(bp.getSolveStatus(),bs.hasIntegerSolution)<<","<<csv(bobj)<<","<<csv(bp.getRelativeGap())<<","<<csv(bpWall)<<","<<csv(absd)<<","<<csv(reld)<<","<<(refFeas?"true":"false")<<","<<(bpFeas?"true":"false")<<","<<bp.getCGIterations()<<","<<bp.getTotalNodes()<<","<<bp.getProcessedNodes()<<","<<bp.getPrunedNodes()<<","<<bp.getRemainingActiveNodes()<<","<<(valid?"true":"false")<<"\n"; r.close();
-        std::ofstream log(cfg.output_dir+"/run.log"); log<<"complete_columns="<<ncols<<"\ncplex_status=OPTIMAL\ncplex_objective="<<csv(cobj)<<"\ncplex_wall_time_sec="<<csv(cplexWall)<<"\nbp_status="<<solveOutcomeName(bp.getSolveStatus(),bs.hasIntegerSolution)<<"\nbp_objective="<<csv(bobj)<<"\nbp_wall_time_sec="<<csv(bpWall)<<"\nbp_cg_iterations="<<bp.getCGIterations()<<"\nbp_branch_nodes="<<bp.getTotalNodes()<<"\npair_valid="<<(valid?"true":"false")<<"\n"; log.close();
+        r<<cfg.num_dc<<","<<cfg.num_retailers<<","<<cfg.random_seed<<","<<csv(w)<<","<<ncols<<","<<csv(enumTime)<<","<<csv(buildTime)<<","<<csv(optTime)<<","<<csv(refValTime)<<","<<csv(cplexWall)<<","<<refRss<<","<<csv(bpInitTime)<<","<<csv(bpSolveTime)<<","<<csv(bpValTime)<<","<<csv(bpWall)<<","<<bpRss<<",UNKNOWN,"<<bp.getCGTotalColumns()<<",UNKNOWN,OPTIMAL,"<<csv(cobj)<<",0,"<<solveOutcomeName(bp.getSolveStatus(),bs.hasIntegerSolution)<<","<<csv(bobj)<<","<<csv(bp.getRelativeGap())<<","<<csv(absd)<<","<<csv(reld)<<","<<(refFeas?"true":"false")<<","<<(bpFeas?"true":"false")<<","<<bp.getCGIterations()<<","<<bp.getTotalNodes()<<","<<bp.getProcessedNodes()<<","<<bp.getPrunedNodes()<<","<<bp.getRemainingActiveNodes()<<","<<(valid?"true":"false")<<"\n"; r.close();
+        std::ofstream log(cfg.output_dir+"/run.log"); log<<"complete_columns="<<ncols<<"\ncolumn_enumeration_time_sec="<<csv(enumTime)<<"\nfull_master_build_time_sec="<<csv(buildTime)<<"\ncplex_optimization_time_sec="<<csv(optTime)<<"\nreference_validation_time_sec="<<csv(refValTime)<<"\nreference_total_wall_time_sec="<<csv(cplexWall)<<"\ncplex_status=OPTIMAL\ncplex_objective="<<csv(cobj)<<"\nbp_initialization_time_sec="<<csv(bpInitTime)<<"\nbp_solve_time_sec="<<csv(bpSolveTime)<<"\nbp_validation_time_sec="<<csv(bpValTime)<<"\nbp_total_wall_time_sec="<<csv(bpWall)<<"\nbp_status="<<solveOutcomeName(bp.getSolveStatus(),bs.hasIntegerSolution)<<"\nbp_objective="<<csv(bobj)<<"\nbp_cg_iterations="<<bp.getCGIterations()<<"\nbp_branch_nodes="<<bp.getTotalNodes()<<"\npair_valid="<<(valid?"true":"false")<<"\n"; log.close();
         std::cout<<"PAIR_VALID="<<(valid?"true":"false")<<" CPLEX="<<csv(cobj)<<" BP="<<csv(bobj)<<" ABS="<<csv(absd)<<" COLS="<<ncols<<"\n"; return valid?0:1;
     }catch(const std::exception&e){std::cerr<<"ERROR: "<<e.what()<<"\n";return 1;}
 }
