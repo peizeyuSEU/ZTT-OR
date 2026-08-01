@@ -1,0 +1,136 @@
+metadata:
+  document_name: FORMAL_EXPERIMENT_MATRIX_A3
+  status: FINAL_FROZEN
+  generated_at: 2026-08-01 21:19 +08:00
+  experiment_part: Part1_RQ4_A3
+  purpose: Evaluate scalability and operational stability of the full GA-BP method.
+  formal_algorithm_commit: 0dd725354732f9b8011e9e7e8540e0e64a3ff223
+  formal_algorithm_tag: paper-exp-baseline-20260801
+  paper_statistics: true
+references:
+  global_baseline: 5_重构代码v2/6_数值实验/00_全局基准/FORMAL_BASELINE_FINAL_20260801_1457.yaml
+  global_protocol: 5_重构代码v2/6_数值实验/00_全局基准/EXPERIMENT_PROTOCOL_FINAL_20260801_1457.md
+  part1_matrix: 5_重构代码v2/6_数值实验/01_实验矩阵/Part1_RQ4/FORMAL_EXPERIMENT_MATRIX_PART1_20260801_1527.yaml
+formal_random_seeds:
+- 101
+- 202
+- 303
+- 404
+- 505
+- 606
+- 707
+- 808
+- 909
+- 1010
+formal_sizes:
+- size_id: 3x5
+  num_dc: 3
+  num_retailers: 5
+- size_id: 3x10
+  num_dc: 3
+  num_retailers: 10
+- size_id: 5x10
+  num_dc: 5
+  num_retailers: 10
+- size_id: 5x20
+  num_dc: 5
+  num_retailers: 20
+- size_id: 5x30
+  num_dc: 5
+  num_retailers: 30
+- size_id: 10x30
+  num_dc: 10
+  num_retailers: 30
+- size_id: 15x30
+  num_dc: 15
+  num_retailers: 30
+- size_id: 15x50
+  num_dc: 15
+  num_retailers: 50
+- size_id: 20x50
+  num_dc: 20
+  num_retailers: 50
+- size_id: 30x100
+  num_dc: 30
+  num_retailers: 100
+run_counts:
+  formal_sizes: 10
+  replications_per_size: 10
+  formal_runs: 100
+  formula: 10 sizes x 10 unified seeds = 100 full GA-BP runs
+pre_formal_acceptance:
+  required: true
+  formal_replication: false
+  paper_statistics: false
+  case:
+    size_id: 30x100
+    num_dc: 30
+    num_retailers: 100
+    random_seed: 101
+  must_pass_before_formal_batch: true
+  note: Previous fixed-w 30x100 smoke does not substitute for this full GA-BP acceptance run.
+frozen_model_parameters:
+  delta: 3000.0
+  investment_exponent: 0.5
+  carbon_price: 2.0
+  carbon_cap: 100000.0
+  min_w: 0.0
+  max_w: 1.0
+  chromosome_length: 10
+  use_sqrt_investment: true
+  use_invest_in_column: true
+frozen_ga_parameters:
+  population_size: 30
+  max_generation: 50
+  crossover_rate: 0.7
+  mutation_rate: -1
+  elitism: true
+  early_stop: true
+  convergence_generations: 10
+  convergence_tolerance: 0.001
+  parallel_fitness: true
+  num_threads: 8
+frozen_bp_parameters:
+  pricing_algorithm: 0
+  pricing_max_cols_per_dc: 3
+  dual_smooth_alpha: 0.0
+  rc_eps: 1.0e-06
+  max_cg_iterations: 2000
+  max_branch_nodes: 10000
+  bp_time_limit_sec: 600.0
+  bp_relative_gap: 0.0
+  parallel_pricing: false
+  cplex_threads: 1
+execution_policy:
+  size_order: ascending
+  parallel_formal_runs: 1
+  outer_workers_per_run: 8
+  inner_cplex_threads: 1
+  parallel_pricing: false
+  resume_required: true
+  preserve_failures_and_timeouts: true
+required_run_outputs:
+- config_used.yaml
+- resolved_config.yaml
+- run.log
+- report.txt
+- result.csv
+- convergence.csv
+- MANIFEST.txt
+- time_verbose.txt
+reporting_rules:
+  unknown_optimum_large_instances: true
+  do_not_report_optimality_gap: true
+  report_mean_sd_min_max_by_size: true
+  sample_standard_deviation_ddof: 1
+  report_certification_and_completion_rates: true
+  do_not_drop_failed_or_timeout_runs: true
+formal_output:
+  server_root: results/paper_experiments/part1_algorithm_validation/A3_ga_bp_scalability/formal_100runs_YYYYMMDD_HHMMSS
+  github_root: 5_重构代码v2/6_数值实验/03_正式结果/Part1_RQ4/A3_ga_bp_scalability/formal_100runs_YYYYMMDD_HHMMSS
+  required_batch_files:
+  - BATCH_MANIFEST.txt
+  - A3_FORMAL_RUN_RESULTS.csv
+  - A3_FORMAL_SUMMARY_BY_SIZE.csv
+  - A3_FORMAL_RESULTS_REPORT.md
+  - A3_PAPER_TABLE.csv
