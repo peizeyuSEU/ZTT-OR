@@ -49,7 +49,7 @@ BP_INTEGRATION_TEST_TARGET = ../bin/test_bp_integration
 CONFIG = 1_launcher/configs/delta3000.yaml
 
 # 默认目标
-.PHONY: all clean run experiments all-bins test-investment test-bp-integration release diagnostics
+.PHONY: all clean run experiments all-bins test-investment test-bp-integration test-all release diagnostics
 
 all: $(TARGET)
 
@@ -72,6 +72,8 @@ test-investment: $(INVESTMENT_TEST_TARGET)
 
 test-bp-integration: $(BP_INTEGRATION_TEST_TARGET)
 	$(BP_INTEGRATION_TEST_TARGET)
+
+test-all: test-investment test-bp-integration
 
 $(INVESTMENT_TEST_TARGET): $(INVESTMENT_TEST_OBJ)
 	@mkdir -p $(dir $@)
