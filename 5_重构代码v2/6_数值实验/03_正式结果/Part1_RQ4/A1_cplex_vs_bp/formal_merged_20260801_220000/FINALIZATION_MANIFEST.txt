@@ -1,0 +1,20 @@
+experiment: A1 complete-column CPLEX versus fixed-w BP
+source_result_commit: b646e4221420693961c61936ac6153d98d112281
+source_result_directory: formal_merged_20260801_220000
+formal_pairs: 180
+paper_table_final: A1_PAPER_TABLE_FINAL.csv
+memory_comparison_in_paper: excluded
+memory_exclusion_reason: shared-process cumulative peak RSS
+uncommitted_script_used_for_formal_A1: true
+uncommitted_script_sha256: 02f6b75bfb9390dacd76e11b2563b1d0790d565747449ea4d3a4aa9ecc5660f6
+actual_run_script_copy: a1_formal_batch_used_20260801_2021.py
+formal_algorithm_commit: 0dd725354732f9b8011e9e7e8540e0e64a3ff223
+core_solver_modified: false
+mean_column_reduction_ratio_in_paper: excluded
+precheck_only_scales: 5x12, 5x20
+formal_scales: 3x5, 3x10, 5x10, 5x14, 5x16, 5x18
+formal_cplex_certified: 180/180
+formal_bp_certified: 180/180
+objective_matches: 180/180
+max_absolute_objective_difference: 2.3283064365386963e-10
+max_relative_objective_difference_percent: 2.7415052240088361e-14
