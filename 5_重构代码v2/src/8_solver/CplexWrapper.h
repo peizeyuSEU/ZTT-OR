@@ -65,6 +65,11 @@ public:
         }
     }
 
+    /** 只有最优 LP 解的对偶变量可用于严格定价和最优性认证。 */
+    static bool isOptimalStatus(IloAlgorithm::Status status) {
+        return status == IloAlgorithm::Optimal;
+    }
+
     /** 检查值是否为整数（容差内） */
     static bool isIntegerValue(double val, double eps = 1e-6) {
         double rounded = std::round(val);

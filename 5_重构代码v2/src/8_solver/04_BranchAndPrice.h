@@ -18,6 +18,7 @@
 #include <iostream>
 #include <chrono>
 #include <cmath>
+#include <stdexcept>
 
 /**
  * 分支定价封装层（Branch and Price）
@@ -87,6 +88,12 @@ public:
     }
 
     void setConfig(const Config& cfg) {
+        // 需求相关投资成本 ½δw²D^γ 必须在列利润中扣除；事后扣除会
+        // 改变服务集合排序，使 column generation 与最终目标不一致。
+        if (cfg.use_sqrt_investment && !cfg.use_invest_in_column) {
+            throw std::invalid_argument(
+                "Demand-scaled investment cost must be included in columns");
+        }
         config = &cfg;
         columnGen.setConfig(cfg);
         columnGen.setRCEps(cfg.rc_eps);

@@ -44,20 +44,21 @@ public:
         inst.numRetailer = config.num_retailers;
         inst.supplierX = config.supplier_x;
         inst.supplierY = config.supplier_y;
-        double coordMax = config.coord_max;
+        const double coordMin = config.coord_min;
+        const double coordMax = config.coord_max;
 
         inst.dcX.resize(inst.numDC);
         inst.dcY.resize(inst.numDC);
         for (int j = 0; j < inst.numDC; j++) {
-            inst.dcX[j] = rng.uniform(0.0, coordMax);
-            inst.dcY[j] = rng.uniform(0.0, coordMax);
+            inst.dcX[j] = rng.uniform(coordMin, coordMax);
+            inst.dcY[j] = rng.uniform(coordMin, coordMax);
         }
 
         inst.retX.resize(inst.numRetailer);
         inst.retY.resize(inst.numRetailer);
         for (int i = 0; i < inst.numRetailer; i++) {
-            inst.retX[i] = rng.uniform(0.0, coordMax);
-            inst.retY[i] = rng.uniform(0.0, coordMax);
+            inst.retX[i] = rng.uniform(coordMin, coordMax);
+            inst.retY[i] = rng.uniform(coordMin, coordMax);
         }
 
         inst.dist.resize(inst.numRetailer, std::vector<double>(inst.numDC));

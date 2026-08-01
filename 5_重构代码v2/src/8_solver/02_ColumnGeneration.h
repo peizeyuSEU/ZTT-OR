@@ -547,6 +547,7 @@ public:
                     return finishTimeLimit();
                 }
 
+                const IloAlgorithm::Status rmpStatus = cplex.getStatus();
                 if (!hasSolution) {
                     if (logger) {
                         if (consoleProgress_)
@@ -558,6 +559,24 @@ public:
                     auto end = std::chrono::steady_clock::now();
                     cgTime += std::chrono::duration<double>(end - start).count();
                     logNodeDiagnostic("RMP_INFEASIBLE");
+                    return result;
+                }
+
+                // cplex.solve() 返回 true 只说明拿到了一个解；Feasible、
+                // Abort 或数值中断的对偶都不能作为严格定价依据。必须在
+                // RMP=Optimal 后才读取 objective/duals、生成列或认证收敛。
+                if (!CplexEnv::isOptimalStatus(rmpStatus)) {
+                    result.feasible = true;
+                    result.rmpOptimalityNotProven = true;
+                    if (logger) {
+                        const std::string msg =
+                            "RMP未达到Optimal状态，停止CG且不读取对偶/不认证上界";
+                        if (consoleProgress_) logger->progress(2, msg);
+                        else logger->log(2, msg);
+                    }
+                    auto end = std::chrono::steady_clock::now();
+                    cgTime += std::chrono::duration<double>(end - start).count();
+                    logNodeDiagnostic("RMP_NOT_OPTIMAL");
                     return result;
                 }
 

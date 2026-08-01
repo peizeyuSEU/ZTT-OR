@@ -41,12 +41,15 @@ EXPERIMENT_TARGET = ../bin/batch
 INVESTMENT_TEST_SRC = 99_test/test_investment_objective.cpp
 INVESTMENT_TEST_OBJ = $(INVESTMENT_TEST_SRC:.cpp=.o)
 INVESTMENT_TEST_TARGET = ../bin/test_investment_objective
+BP_INTEGRATION_TEST_SRC = 99_test/test_bp_integration.cpp
+BP_INTEGRATION_TEST_OBJ = $(BP_INTEGRATION_TEST_SRC:.cpp=.o)
+BP_INTEGRATION_TEST_TARGET = ../bin/test_bp_integration
 
 # 默认运行配置（make run 使用），可用命令行覆盖：make run CONFIG=xxx.yaml
 CONFIG = 1_launcher/configs/delta3000.yaml
 
 # 默认目标
-.PHONY: all clean run experiments all-bins test-investment release diagnostics
+.PHONY: all clean run experiments all-bins test-investment test-bp-integration release diagnostics
 
 all: $(TARGET)
 
@@ -67,9 +70,16 @@ diagnostics:
 test-investment: $(INVESTMENT_TEST_TARGET)
 	$(INVESTMENT_TEST_TARGET)
 
+test-bp-integration: $(BP_INTEGRATION_TEST_TARGET)
+	$(BP_INTEGRATION_TEST_TARGET)
+
 $(INVESTMENT_TEST_TARGET): $(INVESTMENT_TEST_OBJ)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(BP_INTEGRATION_TEST_TARGET): $(BP_INTEGRATION_TEST_OBJ)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS)
 
 # 编译并运行（默认配置 delta3000.yaml；产物在 v2/bin，日志固定在 v2/results/single）
 run: $(TARGET)
@@ -87,11 +97,13 @@ $(EXPERIMENT_TARGET): $(EXPERIMENT_OBJ)
 # 通用编译规则（自动跟踪头文件依赖）
 %.o: %.cpp
 	$(CXX) $(CXXFLAGS) -MMD -MP -c $< -o $@
--include $(MAIN_OBJ:.o=.d) $(EXPERIMENT_OBJ:.o=.d) $(INVESTMENT_TEST_OBJ:.o=.d)
+-include $(MAIN_OBJ:.o=.d) $(EXPERIMENT_OBJ:.o=.d) $(INVESTMENT_TEST_OBJ:.o=.d) $(BP_INTEGRATION_TEST_OBJ:.o=.d)
 
 # 清理
 clean:
 	rm -f $(MAIN_OBJ) $(EXPERIMENT_OBJ)
 	rm -f $(INVESTMENT_TEST_OBJ)
+	rm -f $(BP_INTEGRATION_TEST_OBJ)
 	rm -f $(TARGET) $(EXPERIMENT_TARGET)
 	rm -f $(INVESTMENT_TEST_TARGET)
+	rm -f $(BP_INTEGRATION_TEST_TARGET)

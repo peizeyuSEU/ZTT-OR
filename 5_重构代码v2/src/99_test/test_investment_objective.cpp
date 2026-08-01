@@ -4,6 +4,7 @@
 #include "../10_common/GAFitnessUtils.h"
 #include "../10_common/SolveDeadline.h"
 #include "../10_common/Instance.h"
+#include "../6_preprocessor/DataGenerator.h"
 #include "../5_result/ExperimentResult.h"
 #include "../5_result/ResultWriter.h"
 #include "../7_formula/01_Revenue.h"
@@ -349,6 +350,79 @@ int main() {
         }
         if (shortDeadline.remainingSeconds() != 0.0) {
             throw std::runtime_error("solve deadline did not expire cleanly");
+        }
+
+        // 批量实验使用 Config::saveToFile() 把展开后的配置重新落盘；往返
+        // 后必须保留所有会改变求解行为的字段，不能回退到默认值。
+        Config roundTrip;
+        roundTrip.num_dc = 2;
+        roundTrip.num_retailers = 3;
+        roundTrip.run_mode = "fixed_w";
+        roundTrip.fixed_w = {0.2, 0.8};
+        roundTrip.rc_eps = 3.0e-8;
+        roundTrip.transport_direct_distance = true;
+        roundTrip.verbose = true;
+        roundTrip.coord_min = 100.0;
+        roundTrip.coord_max = 101.0;
+        roundTrip.pricing_algorithm = 1;
+        roundTrip.pricing_max_cols_per_dc = 3;
+        roundTrip.parallel_pricing = true;
+        roundTrip.dual_smooth_alpha = 0.25;
+        const std::string roundTripPath = "test_config_roundtrip.tmp";
+        if (!roundTrip.saveToFile(roundTripPath)) {
+            throw std::runtime_error("failed to save complete configuration");
+        }
+        Config loadedRoundTrip;
+        if (!loadedRoundTrip.loadFromFile(roundTripPath)) {
+            throw std::runtime_error("failed to reload complete configuration");
+        }
+        std::remove(roundTripPath.c_str());
+        std::string configError;
+        if (!loadedRoundTrip.validate(&configError)
+            || loadedRoundTrip.rc_eps != roundTrip.rc_eps
+            || !loadedRoundTrip.transport_direct_distance
+            || !loadedRoundTrip.verbose
+            || loadedRoundTrip.fixed_w != roundTrip.fixed_w
+            || loadedRoundTrip.pricing_algorithm != 1
+            || loadedRoundTrip.pricing_max_cols_per_dc != 3
+            || !loadedRoundTrip.parallel_pricing
+            || loadedRoundTrip.dual_smooth_alpha != 0.25) {
+            throw std::runtime_error(
+                "resolved configuration did not survive save/load round trip: "
+                + configError);
+        }
+
+        Config invalidFixedW = loadedRoundTrip;
+        invalidFixedW.fixed_w.pop_back();
+        if (invalidFixedW.validate()) {
+            throw std::runtime_error("short fixed_w vector passed validation");
+        }
+        Config invalidChromosome = loadedRoundTrip;
+        invalidChromosome.run_mode = "ga";
+        invalidChromosome.chromosome_length = 11;
+        if (invalidChromosome.validate()) {
+            throw std::runtime_error("out-of-range chromosome length passed validation");
+        }
+        Config invalidLegacyInvestment = loadedRoundTrip;
+        invalidLegacyInvestment.run_mode = "ga";
+        invalidLegacyInvestment.use_sqrt_investment = true;
+        invalidLegacyInvestment.use_invest_in_column = false;
+        if (invalidLegacyInvestment.validate()) {
+            throw std::runtime_error(
+                "demand-scaled post-hoc investment mode passed validation");
+        }
+
+        DataGenerator coordinateGenerator(7);
+        Instance coordinateInstance = coordinateGenerator.generate(loadedRoundTrip);
+        for (double x : coordinateInstance.dcX) {
+            if (x < loadedRoundTrip.coord_min || x > loadedRoundTrip.coord_max) {
+                throw std::runtime_error("coord_min was not applied to DC coordinates");
+            }
+        }
+        for (double y : coordinateInstance.retY) {
+            if (y < loadedRoundTrip.coord_min || y > loadedRoundTrip.coord_max) {
+                throw std::runtime_error("coord_min was not applied to retailer coordinates");
+            }
         }
 
         ExperimentResult noSolutionResult;

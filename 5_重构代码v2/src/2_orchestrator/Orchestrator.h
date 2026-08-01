@@ -21,6 +21,7 @@
 #include <sstream>
 #include <memory>
 #include <chrono>
+#include <stdexcept>
 
 /**
  * 编排模块（Orchestrator）⭐
@@ -45,8 +46,11 @@ public:
      */
     void initialize(const std::string& configPath,
                     const std::string& externalOutputDir = "") {
-        // 读配置
-        config_.loadFromFile(configPath);
+        // 读配置。配置文件缺失时绝不能静默回退到 Config 默认值运行实验。
+        if (!config_.loadFromFile(configPath)) {
+            throw std::runtime_error("Failed to load configuration: " + configPath);
+        }
+        config_.validateOrThrow();
 
         // 确定输出目录：批量实验传入 entryDir（落到 results/experiment/），
         // 单次运行则创建 results/single/ 目录，二者互不干扰。

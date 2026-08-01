@@ -1246,6 +1246,10 @@ private:
                 const double lineDy = yq - yp;
                 const double lineNorm =
                     std::sqrt(lineDx * lineDx + lineDy * lineDy);
+                // 与“相同点”判定一致地保护余弦分母。坐标虽未逐分量命中
+                // 相同点阈值时，线段长度仍可能极小；继续除以 lineNorm 会
+                // 放大浮点误差并使候选集分类不稳定。
+                if (lineNorm <= 1e-15) continue;
 
                 // 定义分区函数 F(x,y)
                 auto F = [&](double x, double y) -> double {

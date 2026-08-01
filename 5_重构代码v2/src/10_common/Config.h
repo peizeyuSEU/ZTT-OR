@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <stdexcept>
 
 /**
  * 配置管理类
@@ -383,29 +384,93 @@ public:
     }
 
     /**
+     * 验证会影响求解正确性和实验可复现性的配置约束。
+     *
+     * loadFromFile() 只负责语法读取；在配置已经由实验条目展开后，由
+     * Orchestrator/批量启动器调用本函数做语义校验。这样不会误把
+     * experiments: 中尚未展开的 fixed_w 当成缺失。
+     */
+    bool validate(std::string* error = nullptr) const {
+        auto fail = [&](const std::string& message) {
+            if (error) *error = message;
+            return false;
+        };
+
+        if (num_dc <= 0 || num_retailers <= 0) {
+            return fail("num_dc and num_retailers must both be positive");
+        }
+        if (population_size <= 0 || max_generation <= 0) {
+            return fail("population_size and max_generation must both be positive");
+        }
+        // binaryToDecimal() 目前采用 0..10 的查表实现，配置必须与其边界一致。
+        if (chromosome_length < 1 || chromosome_length > 10) {
+            return fail("chromosome_length must satisfy 1 <= chromosome_length <= 10");
+        }
+        if (!std::isfinite(min_w) || !std::isfinite(max_w)
+            || min_w < 0.0 || max_w > 1.0 || min_w > max_w) {
+            return fail("min_w and max_w must satisfy 0 <= min_w <= max_w <= 1");
+        }
+        if (!std::isfinite(investment_exponent)
+            || investment_exponent <= 0.0 || investment_exponent > 1.0) {
+            return fail("investment_exponent must satisfy 0 < gamma <= 1");
+        }
+        // D_j^gamma 依赖服务集合，不能在 BP 结束后再统一扣除。
+        if (use_sqrt_investment && !use_invest_in_column) {
+            return fail(
+                "use_sqrt_investment=true requires use_invest_in_column=true");
+        }
+        if (!std::isfinite(coord_min) || !std::isfinite(coord_max)
+            || coord_min > coord_max) {
+            return fail("coord_min must not exceed coord_max");
+        }
+        if (rc_eps <= 0.0 || !std::isfinite(rc_eps)) {
+            return fail("rc_eps must be finite and positive");
+        }
+        if (pricing_algorithm < 0 || pricing_algorithm > 2) {
+            return fail("pricing_algorithm must be 0, 1, or 2");
+        }
+        if (pricing_max_cols_per_dc < 1 || pricing_adaptive_max_cols < 1
+            || pricing_high_w_max_cols < 1) {
+            return fail("all pricing column-count limits must be positive");
+        }
+        if (bp_time_limit_sec < 0.0 || bp_relative_gap < 0.0) {
+            return fail("bp_time_limit_sec and bp_relative_gap must be non-negative");
+        }
+        if (run_mode != "ga" && run_mode != "fixed_w") {
+            return fail("run_mode must be 'ga' or 'fixed_w'");
+        }
+        if (run_mode == "fixed_w") {
+            if (static_cast<int>(fixed_w.size()) != num_dc) {
+                return fail("fixed_w length must equal num_dc in fixed_w mode");
+            }
+            for (double value : fixed_w) {
+                if (!std::isfinite(value) || value < 0.0 || value > 1.0) {
+                    return fail("every fixed_w value must lie in [0, 1]");
+                }
+            }
+        }
+        return true;
+    }
+
+    void validateOrThrow() const {
+        std::string error;
+        if (!validate(&error)) {
+            throw std::runtime_error("Invalid configuration: " + error);
+        }
+    }
+
+    /**
      * 保存当前配置为YAML文件
      */
-    void saveToFile(const std::string& filename) const {
+    bool saveToFile(const std::string& filename) const {
         std::ofstream file(filename);
         if (!file.is_open()) {
             std::cerr << "[Config] 无法写入 " << filename << std::endl;
-            return;
+            return false;
         }
-
-        file << "# 配置参数（自动生成）\n";
-        saveField(file, "num_dc", num_dc);
-        saveField(file, "num_retailers", num_retailers);
-        saveField(file, "population_size", population_size);
-        saveField(file, "max_generation", max_generation);
-        saveField(file, "crossover_rate", crossover_rate);
-        saveField(file, "mutation_rate", mutation_rate);
-        saveField(file, "elitism", elitism);
-        saveField(file, "chromosome_length", chromosome_length);
-        saveField(file, "carbon_price", carbon_price);
-        saveField(file, "carbon_cap", carbon_cap);
-        saveField(file, "delta", delta);
-        saveField(file, "random_seed", random_seed);
+        writeYaml(file);
         file.close();
+        return static_cast<bool>(file);
     }
 
     /**
@@ -414,19 +479,7 @@ public:
      */
     std::string toYamlString() const {
         std::stringstream ss;
-        ss << "num_dc: " << num_dc << "\n";
-        ss << "num_retailers: " << num_retailers << "\n";
-        ss << "population_size: " << population_size << "\n";
-        ss << "max_generation: " << max_generation << "\n";
-        ss << "crossover_rate: " << crossover_rate << "\n";
-        ss << "mutation_rate: " << mutation_rate << "\n";
-        ss << "elitism: " << (elitism ? "true" : "false") << "\n";
-        ss << "chromosome_length: " << chromosome_length << "\n";
-        ss << "carbon_price: " << carbon_price << "\n";
-        ss << "carbon_cap: " << carbon_cap << "\n";
-        ss << "delta: " << delta << "\n";
-        ss << "random_seed: " << random_seed << "\n";
-        ss << "holding_cost: " << holding_cost << "\n";
+        writeYaml(ss);
         return ss.str();
     }
 
@@ -581,6 +634,7 @@ private:
         else if (key == "run_mode") run_mode = value;
         else if (key == "fixed_w") {
             // 解析形如 "[0, 0, 0]" 的列表
+            fixed_w.clear();
             std::string v = value;
             if (!v.empty() && v.front() == '[') v = v.substr(1);
             if (!v.empty() && v.back() == ']') v = v.substr(0, v.size() - 1);
@@ -603,6 +657,120 @@ private:
 
     static void saveField(std::ofstream& file, const std::string& name, bool value) {
         file << name << ": " << (value ? "true" : "false") << "\n";
+    }
+
+    /** 解析器与批量启动器共用的完整序列化入口。 */
+    void writeYaml(std::ostream& out) const {
+        out << "# Resolved experiment configuration (automatically generated)\n";
+        out << "num_dc: " << num_dc << "\n";
+        out << "num_retailers: " << num_retailers << "\n";
+        out << "population_size: " << population_size << "\n";
+        out << "max_generation: " << max_generation << "\n";
+        out << "crossover_rate: " << crossover_rate << "\n";
+        out << "mutation_rate: " << mutation_rate << "\n";
+        out << "elitism: " << (elitism ? "true" : "false") << "\n";
+        out << "chromosome_length: " << chromosome_length << "\n";
+        out << "min_w: " << min_w << "\n";
+        out << "max_w: " << max_w << "\n";
+
+        out << "carbon_price: " << carbon_price << "\n";
+        out << "carbon_cap: " << carbon_cap << "\n";
+        out << "inv_carbon_coeff: " << inv_carbon_coeff << "\n";
+        out << "transport_carbon_coeff: " << transport_carbon_coeff << "\n";
+        out << "fac_carbon_ratio: " << fac_carbon_ratio << "\n";
+        out << "delta: " << delta << "\n";
+
+        out << "service_level: " << service_level << "\n";
+        out << "z_alpha: " << z_alpha << "\n";
+        out << "order_fixed_cost: " << order_fixed_cost << "\n";
+        out << "transport_fixed_cost: " << transport_fixed_cost << "\n";
+        out << "lead_time: " << lead_time << "\n";
+        out << "holding_cost: " << holding_cost << "\n";
+
+        out << "random_seed: " << random_seed << "\n";
+        out << "coord_min: " << coord_min << "\n";
+        out << "coord_max: " << coord_max << "\n";
+        out << "mu_min: " << mu_min << "\n";
+        out << "mu_max: " << mu_max << "\n";
+        out << "var_min: " << var_min << "\n";
+        out << "var_max: " << var_max << "\n";
+        out << "fixed_cost_min: " << fixed_cost_min << "\n";
+        out << "fixed_cost_max: " << fixed_cost_max << "\n";
+        out << "reserve_price_min: " << reserve_price_min << "\n";
+        out << "reserve_price_max: " << reserve_price_max << "\n";
+        out << "supplier_x: " << supplier_x << "\n";
+        out << "supplier_y: " << supplier_y << "\n";
+
+        out << "verbose: " << (verbose ? "true" : "false") << "\n";
+        out << "output_dir: " << output_dir << "\n";
+        out << "log_file: " << log_file << "\n";
+
+        out << "rc_eps: " << rc_eps << "\n";
+        out << "max_branch_nodes: " << max_branch_nodes << "\n";
+        out << "max_cg_iterations: " << max_cg_iterations << "\n";
+        out << "use_dfs: " << (use_dfs ? "true" : "false") << "\n";
+        out << "bb_node_strategy: " << bb_node_strategy << "\n";
+        out << "bb_hybrid_switch_gap: " << bb_hybrid_switch_gap << "\n";
+        out << "bb_hybrid_dfs_quota: " << bb_hybrid_dfs_quota << "\n";
+        out << "bb_adaptive_stagnation_nodes: "
+            << bb_adaptive_stagnation_nodes << "\n";
+        out << "bb_adaptive_cooldown_nodes: "
+            << bb_adaptive_cooldown_nodes << "\n";
+        out << "bp_time_limit_sec: " << bp_time_limit_sec << "\n";
+        out << "bp_relative_gap: " << bp_relative_gap << "\n";
+
+        out << "cg_early_stop: " << (cg_early_stop ? "true" : "false") << "\n";
+        out << "cg_stall_iterations: " << cg_stall_iterations << "\n";
+        out << "cg_stall_tolerance: " << cg_stall_tolerance << "\n";
+        out << "dual_smooth_alpha: " << dual_smooth_alpha << "\n";
+        out << "root_heuristic: " << (root_heuristic ? "true" : "false") << "\n";
+        out << "root_rmp_mip_heuristic: "
+            << (root_rmp_mip_heuristic ? "true" : "false") << "\n";
+        out << "root_rmp_mip_time_limit_sec: "
+            << root_rmp_mip_time_limit_sec << "\n";
+
+        out << "use_sqrt_investment: "
+            << (use_sqrt_investment ? "true" : "false") << "\n";
+        out << "investment_exponent: " << investment_exponent << "\n";
+        out << "use_invest_in_column: "
+            << (use_invest_in_column ? "true" : "false") << "\n";
+        out << "use_paper_algorithm3: "
+            << (use_paper_algorithm3 ? "true" : "false") << "\n";
+        out << "pricing_algorithm: " << pricing_algorithm << "\n";
+        out << "pricing_max_cols_per_dc: " << pricing_max_cols_per_dc << "\n";
+        out << "pricing_adaptive_cols: "
+            << (pricing_adaptive_cols ? "true" : "false") << "\n";
+        out << "pricing_adaptive_stall_iterations: "
+            << pricing_adaptive_stall_iterations << "\n";
+        out << "pricing_adaptive_max_cols: "
+            << pricing_adaptive_max_cols << "\n";
+        out << "pricing_per_dc_by_w: "
+            << (pricing_per_dc_by_w ? "true" : "false") << "\n";
+        out << "pricing_high_w_threshold: " << pricing_high_w_threshold << "\n";
+        out << "pricing_high_w_max_cols: " << pricing_high_w_max_cols << "\n";
+
+        out << "parallel_fitness: " << (parallel_fitness ? "true" : "false") << "\n";
+        out << "num_threads: " << num_threads << "\n";
+        out << "parallel_pricing: " << (parallel_pricing ? "true" : "false") << "\n";
+        out << "cplex_threads: " << cplex_threads << "\n";
+        out << "pricing_threads: " << pricing_threads << "\n";
+        out << "core_budget: " << core_budget << "\n";
+
+        out << "early_stop: " << (early_stop ? "true" : "false") << "\n";
+        out << "convergence_generations: " << convergence_generations << "\n";
+        out << "convergence_tolerance: " << convergence_tolerance << "\n";
+        out << "run_mode: " << run_mode << "\n";
+        if (!fixed_w.empty()) {
+            out << "fixed_w: [";
+            for (size_t i = 0; i < fixed_w.size(); ++i) {
+                if (i > 0) out << ", ";
+                out << fixed_w[i];
+            }
+            out << "]\n";
+        }
+        out << "legacy_mode: " << (legacy_mode ? "true" : "false") << "\n";
+        out << "transport_direct_distance: "
+            << (transport_direct_distance ? "true" : "false") << "\n";
     }
 };
 

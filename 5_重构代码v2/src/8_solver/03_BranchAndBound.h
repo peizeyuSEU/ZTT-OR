@@ -148,9 +148,15 @@ public:
         prunedNodes = 0;
         remainingActiveNodes = 0;
         integerSolutions = 0;
-        bestLowerBound = -DBL_MAX;
+        // 全零 z 是根节点整数主问题的天然可行解：不选任何 DC/服务列，
+        // 内层列利润为 0。把它作为 incumbent 后，根节点 CG 即使超时或
+        // 未完成认证，也不会错误报告“没有整数可行解”。
+        bestLowerBound = 0.0;
         bestUpperBound = DBL_MAX;
         bestSolution = Solution();
+        bestSolution.totalProfit = 0.0;
+        bestSolution.w = inst ? inst->w : std::vector<double>();
+        bestSolution.hasIntegerSolution = true;
         solveStatus = SolveStatus::NOT_STARTED;
         finalRelativeGap = DBL_MAX;
 
@@ -174,29 +180,38 @@ public:
             remainingActiveNodes = 1;
             solveStatus = SolveStatus::TIME_LIMIT;
             if (rootResult.feasible && rootResult.isInteger) {
-                bestLowerBound = rootResult.lpObjective;
-                saveIntegerSolution(rootResult);
-                integerSolutions++;
-                bestSolution.solveStatus = solveStatus;
-                bestSolution.bestBound = DBL_MAX;
-                bestSolution.relativeGap = DBL_MAX;
-                bestSolution.hasIntegerSolution = true;
-                return bestLowerBound;
+                if (rootResult.lpObjective > bestLowerBound + rc_eps) {
+                    bestLowerBound = rootResult.lpObjective;
+                    saveIntegerSolution(rootResult);
+                    integerSolutions++;
+                }
             }
             bestSolution.solveStatus = solveStatus;
-            bestSolution.hasIntegerSolution = false;
-            return -DBL_MAX;
+            bestSolution.bestBound = DBL_MAX;
+            bestSolution.relativeGap = DBL_MAX;
+            bestSolution.hasIntegerSolution = true;
+            return bestLowerBound;
         }
 
         if (!rootResult.feasible) {
-            solveStatus = SolveStatus::INFEASIBLE;
+            // 根节点含全零方案，理论上不可能因模型不可行而没有整数解。
+            // 因而此处是 RMP/CPLEX 失败，而非原问题不可行；保留空 incumbent。
+            solveStatus = SolveStatus::ERROR;
             bestSolution.solveStatus = solveStatus;
-            return -DBL_MAX;  // 不可行
+            bestSolution.bestBound = DBL_MAX;
+            bestSolution.relativeGap = DBL_MAX;
+            bestSolution.hasIntegerSolution = true;
+            return bestLowerBound;
         }
         if (!rootResult.certifiedOptimal) {
-            solveStatus = SolveStatus::CG_ITERATION_LIMIT;
+            solveStatus = rootResult.rmpOptimalityNotProven
+                              ? SolveStatus::FEASIBLE_NOT_PROVEN
+                              : SolveStatus::CG_ITERATION_LIMIT;
             bestSolution.solveStatus = solveStatus;
-            return -DBL_MAX;
+            bestSolution.bestBound = DBL_MAX;
+            bestSolution.relativeGap = DBL_MAX;
+            bestSolution.hasIntegerSolution = true;
+            return bestLowerBound;
         }
 
         // 根节点LP解作为初始上界
@@ -466,7 +481,9 @@ public:
                         static_cast<int>(nodeStack.size()) + 2;
                     abortedByUncertifiedCG = true;
                 } else if (childResult.feasible && !childResult.certifiedOptimal) {
-                    solveStatus = SolveStatus::CG_ITERATION_LIMIT;
+                    solveStatus = childResult.rmpOptimalityNotProven
+                                      ? SolveStatus::FEASIBLE_NOT_PROVEN
+                                      : SolveStatus::CG_ITERATION_LIMIT;
                     // 左子树尚未完成，右子树也还没有开始。
                     remainingActiveNodes =
                         static_cast<int>(nodeStack.size()) + 2;
@@ -499,7 +516,9 @@ public:
                         static_cast<int>(nodeStack.size()) + 1;
                     abortedByUncertifiedCG = true;
                 } else if (childResult.feasible && !childResult.certifiedOptimal) {
-                    solveStatus = SolveStatus::CG_ITERATION_LIMIT;
+                    solveStatus = childResult.rmpOptimalityNotProven
+                                      ? SolveStatus::FEASIBLE_NOT_PROVEN
+                                      : SolveStatus::CG_ITERATION_LIMIT;
                     remainingActiveNodes =
                         static_cast<int>(nodeStack.size()) + 1;
                     abortedByUncertifiedCG = true;
@@ -695,12 +714,15 @@ private:
             for (int i = 0; i < (int)S.size() && i < numRetailer; i++)
                 if (S[i] == 1 && retailerUsed[i] == 1) { conflict = true; break; }
             if (conflict) continue;
-            for (int i = 0; i < (int)S.size() && i < numRetailer; i++)
-                if (S[i] == 1) retailerUsed[i] = 1;
-            dcUsed.push_back(c.j);
             double pj = rootResult.p_j[c.j][c.k];
             double colProfit = objFormula.columnProfit(
                 *inst, c.j, S, pj, inst->w[c.j]);
+            // 空方案的利润为 0。rounding 只能抬高 incumbent，不能为了
+            // “选一列”而接受负边际利润并把一个有效空方案覆盖掉。
+            if (colProfit <= rc_eps) continue;
+            for (int i = 0; i < (int)S.size() && i < numRetailer; i++)
+                if (S[i] == 1) retailerUsed[i] = 1;
+            dcUsed.push_back(c.j);
             heuristicProfit += colProfit;
             DCSolution dcSol;
             dcSol.dcIndex = c.j;
@@ -711,7 +733,7 @@ private:
             heuristicSolution.dcSolutions.push_back(dcSol);
             chosenCols++;
         }
-        if (chosenCols == 0) return -DBL_MAX;
+        if (chosenCols == 0) return 0.0;
         heuristicSolution.totalProfit = heuristicProfit;
         heuristicSolution.w = inst->w;
         heuristicSolution.hasIntegerSolution = true;

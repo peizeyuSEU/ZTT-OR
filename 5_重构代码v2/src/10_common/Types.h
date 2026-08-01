@@ -76,6 +76,9 @@ struct CGResult {
     bool isInteger = false;
     bool feasible = true;
     bool certifiedOptimal = false;
+    // RMP 返回了可行解但未达到 LP 最优状态。此时不能读取对偶做定价，
+    // 更不能把当前 RMP 目标作为分支定界的认证上界。
+    bool rmpOptimalityNotProven = false;
     bool iterationLimitReached = false;
     bool timeLimitReached = false;
     std::vector<std::vector<double>> final_z_j;
