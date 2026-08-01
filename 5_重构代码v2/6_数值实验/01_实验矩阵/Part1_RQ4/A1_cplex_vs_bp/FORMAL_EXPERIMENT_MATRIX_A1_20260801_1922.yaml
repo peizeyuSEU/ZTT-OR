@@ -1,0 +1,136 @@
+metadata:
+  document_name: FORMAL_EXPERIMENT_MATRIX_A1
+  status: FINAL_FROZEN
+  generated_at: 2026-08-01 19:22 +08:00
+  experiment_part: Part1_RQ4_A1
+  purpose: Validate fixed-w Branch-and-Price against the complete-column integer master solved by CPLEX.
+  source_commit: 0dd725354732f9b8011e9e7e8540e0e64a3ff223
+  source_tag: paper-exp-baseline-20260801
+  formal_statistics: true
+references:
+  global_baseline: 5_重构代码v2/6_数值实验/00_全局基准/FORMAL_BASELINE_FINAL_20260801_1457.yaml
+  global_protocol: 5_重构代码v2/6_数值实验/00_全局基准/EXPERIMENT_PROTOCOL_FINAL_20260801_1457.md
+  parent_matrix: 5_重构代码v2/6_数值实验/01_实验矩阵/Part1_RQ4/FORMAL_EXPERIMENT_MATRIX_PART1_20260801_1527.yaml
+formal_random_seeds:
+- 101
+- 202
+- 303
+- 404
+- 505
+- 606
+- 707
+- 808
+- 909
+- 1010
+sizes:
+- size_id: 3x5
+  num_dc: 3
+  num_retailers: 5
+- size_id: 3x10
+  num_dc: 3
+  num_retailers: 10
+- size_id: 5x10
+  num_dc: 5
+  num_retailers: 10
+fixed_w_scenarios:
+- scenario_id: w000
+  uniform_w: 0.0
+- scenario_id: w040
+  uniform_w: 0.4
+- scenario_id: w080
+  uniform_w: 0.8
+methods:
+  reference:
+    name: complete_column_integer_master_cplex
+    required_status: OPTIMAL
+    required_gap: 0.0
+  candidate:
+    name: branch_and_price
+    required_status: OPTIMAL_CERTIFIED
+    required_gap: 0.0
+run_counts:
+  base_pairs: 90
+  method_runs: 180
+  formula: 3 sizes x 3 fixed-w scenarios x 10 seeds = 90 paired comparisons
+a1_runtime_overrides:
+  run_mode: fixed_w_validation
+  ga_enabled: false
+  chromosome_length: NOT_APPLICABLE
+  parallel_fitness: false
+  num_threads: 1
+  parallel_pricing: false
+  cplex_threads: 1
+frozen_bp_parameters:
+  delta: 3000.0
+  investment_exponent: 0.5
+  pricing_algorithm: 0
+  pricing_max_cols_per_dc: 3
+  dual_smooth_alpha: 0.0
+  rc_eps: 1.0e-06
+  max_cg_iterations: 2000
+  max_branch_nodes: 10000
+  bp_time_limit_sec: 600.0
+  bp_relative_gap: 0.0
+  parallel_pricing: false
+  cplex_threads: 1
+  use_sqrt_investment: true
+  use_invest_in_column: true
+  transport_direct_distance: false
+  cg_early_stop: false
+  legacy_mode: false
+pre_formal_acceptance:
+  required: true
+  formal_statistics: false
+  case:
+    num_dc: 3
+    num_retailers: 5
+    random_seed: 101
+    uniform_w: 0.4
+  must_pass_before_formal_batch: true
+comparison_metrics:
+- size_id
+- num_dc
+- num_retailers
+- random_seed
+- fixed_w
+- complete_column_count
+- cplex_status
+- cplex_objective
+- cplex_gap
+- cplex_wall_time_sec
+- bp_status
+- bp_objective
+- bp_gap
+- bp_wall_time_sec
+- absolute_objective_difference
+- relative_objective_difference
+- objective_match
+- reference_solution_feasible
+- bp_solution_feasible
+- decision_match
+- equivalent_multiple_optima
+- bp_cg_iterations
+- bp_branch_nodes
+- bp_processed_nodes
+- bp_pruned_nodes
+- bp_remaining_active_nodes
+- pair_valid
+- notes
+acceptance_rules:
+  formal_numeric_tolerance: Use frozen code/model tolerance; do not loosen after observing results.
+  all_90_pairs_required_for_full_pass: true
+  decision_vector_identity_required: false
+  equivalent_optima_allowed: true
+  original_model_feasibility_check_required: true
+stop_rules:
+- If the single-pair pre-formal acceptance fails, do not start the formal batch.
+- If any formal pair has a material objective mismatch, configuration mismatch, or incomplete full-column model, stop the remaining batch and preserve all completed records.
+- Do not replace a failed seed, alter a fixed-w level, or change a time limit.
+formal_output:
+  server_root: results/paper_experiments/part1_algorithm_validation/A1_cplex_vs_bp/formal_90pairs_YYYYMMDD_HHMMSS
+  github_root: 5_重构代码v2/6_数值实验/03_正式结果/Part1_RQ4/A1_cplex_vs_bp/formal_90pairs_YYYYMMDD_HHMMSS
+  required_batch_files:
+  - BATCH_MANIFEST.txt
+  - A1_FORMAL_PAIRED_RESULTS.csv
+  - A1_FORMAL_SUMMARY.csv
+  - A1_FORMAL_RESULTS_REPORT.md
