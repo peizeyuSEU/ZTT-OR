@@ -1,0 +1,22 @@
+experiment_part: Part1_RQ4_A2
+formal_replication: true
+paper_statistics: included
+method_pair: Grid Search-BP vs GA-BP
+seeds: [101, 202, 303, 404, 505, 606, 707, 808, 909, 1010]
+num_dc: 5
+num_retailers: 20
+chromosome_length: 3
+grid_combinations_per_seed: 32768
+parallel_grid_workers: 8
+ga_parallel_fitness: true
+ga_num_threads: 8
+parallel_pricing: false
+cplex_threads: 1
+code_commit_at_aggregation: fb4d0147c1eb25a69d5e23119729060a127baeef
+tag_target_commit: 0dd725354732f9b8011e9e7e8540e0e64a3ff223
+completed_pairs: 10/10
+interrupted_records_preserved: seed_202_interrupted_after_0_partial
+server_cpu: Intel i9-10980XE, 18 physical cores, 36 logical CPUs
+server_memory: 251 GiB
+aggregation_time: 2026-08-01T19:04:59
+aggregation_only: true

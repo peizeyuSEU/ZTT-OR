@@ -18,11 +18,11 @@ def yaml_scalar(v):
     return str(v)
 
 
-def make_config(path, w, root):
+def make_config(path, w, root, seed):
     lines = [
         "plan_name: a2_grid_precheck_seed101",
         "plan_desc: A2 feasibility precheck; fixed w BP only",
-        "num_dc: 5", "num_retailers: 20", "random_seed: 101",
+        "num_dc: 5", "num_retailers: 20", f"random_seed: {seed}",
         "run_mode: fixed_w", "fixed_w: [" + ", ".join(f"{x:.15g}" for x in w) + "]",
         "use_sqrt_investment: true", "use_invest_in_column: true",
         "transport_direct_distance: false", "legacy_mode: false",
@@ -58,7 +58,7 @@ def read_result(path):
 def run_one(item, args):
     gid, digits, w, root = item
     cfg = root / "configs" / f"grid_{gid:05d}.yaml"
-    make_config(cfg, w, root)
+    make_config(cfg, w, root, args.seed)
     start = time.time()
     log = root / "checkpoint" / f"grid_{gid:05d}.launcher.log"
     cmd = [str(args.binary), str(cfg)]
@@ -106,6 +106,7 @@ def main():
     ap.add_argument("--root", type=Path, required=True)
     ap.add_argument("--limit", type=int, default=64)
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--seed", type=int, default=101)
     args = ap.parse_args()
     args.repo = args.repo.resolve(); args.binary = args.binary.resolve(); args.root = args.root.resolve()
     args.root.mkdir(parents=True, exist_ok=True)
