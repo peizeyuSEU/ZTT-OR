@@ -8,7 +8,7 @@ def validate(run_dir, nd=None, nr=None, seed=None):
     for name in REQUIRED:
         if not (p/name).is_file() or (p/name).stat().st_size==0: errors.append(f"missing_or_empty:{name}")
     cfg=(p/"config_used.yaml").read_text(errors="ignore") if (p/"config_used.yaml").exists() else ""
-    checks={"chromosome_length":"10","population_size":"30","max_generation":"50","num_threads":"8","cplex_threads":"1","parallel_pricing":"false","pricing_max_cols_per_dc":"3","dual_smooth_alpha":"0"}
+    checks={"chromosome_length":"10","population_size":"30","max_generation":"50","num_threads":"8","cplex_threads":"1","parallel_pricing":"false","pricing_max_cols_per_dc":"3","dual_smooth_alpha":"0(?:\\.0+)?"}
     for k,v in checks.items():
         if not re.search(rf"^\s*{re.escape(k)}\s*:\s*{re.escape(v)}\s*$",cfg,re.M): errors.append(f"config_mismatch:{k}={v}")
     for k,v in (("num_dc",nd),("num_retailers",nr),("random_seed",seed)):

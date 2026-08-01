@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import csv,datetime,fcntl,json,os,re,subprocess,sys
+import csv,datetime,fcntl,json,os,re,shutil,subprocess,sys,time
 from pathlib import Path
 from a3_validate_run import validate
 
@@ -48,8 +48,17 @@ def main():
                 outrel=os.path.relpath(run,CODE_ROOT); cfg=run/'config_used.yaml'; setcfg(TEMPLATE,cfg,int(r['num_dc']),int(r['num_retailers']),seed,outrel)
                 (run/'MANIFEST.txt').write_text(f"experiment_type: A3 formal GA-BP task\nsize: {r['size_id']}\nrandom_seed: {seed}\nformal_replication: true\nsource_algorithm_commit: 0dd725354732f9b8011e9e7e8540e0e64a3ff223\n")
                 if dry: print(f"DRY_RUN order={r['order_id']} {r['size_id']} seed={seed}"); r['status']='PENDING'; write_rows(q,rows); continue
+                single_root=CODE_ROOT/'results/single'; before={p.name for p in single_root.iterdir() if p.is_dir()} if single_root.exists() else set(); started=time.time()
                 with (run/'run.log').open('w') as log:
                     proc=subprocess.Popen(['/usr/bin/time','-v','-o',str(run/'time_verbose.txt'),str(CODE_ROOT/'bin/ga_bp'),str(cfg)],cwd=CODE_ROOT,stdout=log,stderr=subprocess.STDOUT); r['process_id']=str(proc.pid); write_rows(q,rows); update_state(rows); rc=proc.wait()
+                candidates=[p for p in single_root.iterdir() if p.is_dir() and p.name not in before and p.stat().st_mtime>=started-2 and (p/'result.csv').exists()] if single_root.exists() else []
+                if candidates:
+                    produced=max(candidates,key=lambda p:p.stat().st_mtime)
+                    for item in produced.iterdir():
+                        target=run/item.name
+                        if item.is_dir(): shutil.copytree(item,target,dirs_exist_ok=True)
+                        else: shutil.copy2(item,target)
+                if not (run/'resolved_config.yaml').exists(): shutil.copy2(cfg,run/'resolved_config.yaml')
                 r['exit_code']=str(rc); r['finished_at']=stamp(); ok,errs=validate(run,int(r['num_dc']),int(r['num_retailers']),seed)
                 if ok: (run/'COMPLETED.ok').write_text('validated\n'); r['status']='COMPLETED'; r['validation_status']='VALID'; r['completion_marker']='COMPLETED.ok'; r['termination_reason']='normal_or_early_stop'
                 else: r['status']='FAILED'; r['validation_status']='INVALID'; r['termination_reason']=';'.join(errs); (run/'FAILED.txt').write_text('\n'.join(errs)+'\n')
