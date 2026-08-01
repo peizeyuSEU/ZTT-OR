@@ -55,6 +55,6 @@ def main():
                 else: r['status']='FAILED'; r['validation_status']='INVALID'; r['termination_reason']=';'.join(errs); (run/'FAILED.txt').write_text('\n'.join(errs)+'\n')
                 write_rows(q,rows); update_state(rows)
                 if r['status']=='FAILED': return 1
-            update_state(rows,'COMPLETED'); return 0
+            update_state(rows,'DRY_RUN' if dry else 'COMPLETED'); return 0
         finally: runlock.unlink(missing_ok=True)
 if __name__=='__main__': raise SystemExit(main())
