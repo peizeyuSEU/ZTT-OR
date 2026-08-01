@@ -1,0 +1,1 @@
+# A3 precheck log audit\n\n- Server log is non-empty and retained.\n- Server SHA-256 and byte count were recorded immediately before this audit.\n- The GitHub copy was force-added as a regular Git blob, not an LFS pointer or empty placeholder.\n- The precheck remains excluded from the formal 100-run statistics.\n
