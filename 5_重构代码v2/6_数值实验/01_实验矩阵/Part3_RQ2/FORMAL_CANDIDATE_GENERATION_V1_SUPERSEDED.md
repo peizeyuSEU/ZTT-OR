@@ -1,0 +1,5 @@
+# Superseded candidate generation V1
+
+status: SUPERSEDED_CANDIDATE_GENERATION_V1
+execution_status: NOT_EXECUTED
+superseded_by: FORMAL_EXPERIMENT_MATRIX_PART3_RQ2_20260802_1348.yaml
