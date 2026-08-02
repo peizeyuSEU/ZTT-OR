@@ -1,0 +1,50 @@
+    [CG] 列生成开始，初始列数=310
+    [CG] CG iter 1: obj=979579.140865, maxRC=694646.785219, +30 cols
+    [CG]   [DIAG] iter=1 posCols=30 newCols=30 effImprove=30 updated=0
+    [CG] CG iter 2: obj=1560961.692993, maxRC=237930.168849, +30 cols
+    [CG]   [DIAG] iter=2 posCols=30 newCols=30 effImprove=30 updated=0
+    [CG] CG iter 3: obj=1749250.463722, maxRC=196424.418282, +26 cols
+    [CG]   [DIAG] iter=3 posCols=26 newCols=26 effImprove=26 updated=0
+    [CG] CG iter 4: obj=1813000.371337, maxRC=78662.074847, +25 cols
+    [CG]   [DIAG] iter=4 posCols=25 newCols=25 effImprove=25 updated=0
+    [CG] CG iter 5: obj=1864507.628900, maxRC=75065.281707, +21 cols
+    [CG]   [DIAG] iter=5 posCols=21 newCols=21 effImprove=21 updated=0
+    [CG] CG iter 6: obj=1891412.542374, maxRC=38175.869165, +16 cols
+    [CG]   [DIAG] iter=6 posCols=16 newCols=16 effImprove=16 updated=0
+    [CG] CG iter 7: obj=1904649.343893, maxRC=39876.819794, +18 cols
+    [CG]   [DIAG] iter=7 posCols=18 newCols=17 effImprove=18 updated=1
+    [CG] CG iter 8: obj=1926179.455633, maxRC=9719.653273, +8 cols
+    [CG]   [DIAG] iter=8 posCols=8 newCols=7 effImprove=8 updated=1
+    [CG] CG iter 9: obj=1938263.695269, maxRC=7698.808621, +3 cols
+    [CG]   [DIAG] iter=9 posCols=3 newCols=3 effImprove=3 updated=0
+    [CG] CG iter 10: obj=1938263.695269, maxRC=2545.228611, +1 cols
+    [CG]   [DIAG] iter=10 posCols=1 newCols=1 effImprove=1 updated=0
+    [CG] 列生成收敛，共 11 轮迭代
+    [CG] [CG-NODE] depth=0 exit=CERTIFIED certified=1 feasible=1 iters=11 generatedColsBeforeNode=0 newCols=176 posCandidates=178 duplicateCandidates=2 updatedCols=2 zeroObjImproveIters=2 objFirst=979579.140865 objLast=1938263.695269 objGain=958684.554403 maxRC=694646.785219 wallSec=0.078396 pricingSec=0.070389 cplexSolveSec=0.004801
+      [BB] 分支定界开始，根节点LP obj=1938263.695269，最大节点数=10000
+      [BB] 根节点启发式下界 LB=1904489.774190（上界=1938263.695269）
+    [CG] [BB-DIAG] 分支 x_{dc=4,retailer=1}, 节点数=1
+    [CG] 列生成开始，初始列数=478
+    [CG] CG iter 12: obj=1938233.519265, maxRC=77419.081543, +23 cols
+    [CG]   [DIAG] iter=12 posCols=23 newCols=23 effImprove=23 updated=0
+    [CG] CG iter 13: obj=1938233.519265, maxRC=70105.258378, +13 cols
+    [CG]   [DIAG] iter=13 posCols=13 newCols=10 effImprove=13 updated=3
+    [CG] CG iter 14: obj=1938233.519265, maxRC=18127.028934, +6 cols
+    [CG]   [DIAG] iter=14 posCols=6 newCols=5 effImprove=6 updated=1
+    [CG] 列生成收敛，共 15 轮迭代
+    [CG] [CG-NODE] depth=1 exit=CERTIFIED certified=1 feasible=1 iters=4 generatedColsBeforeNode=176 newCols=38 posCandidates=42 duplicateCandidates=4 updatedCols=4 zeroObjImproveIters=3 objFirst=1938233.519265 objLast=1938233.519265 objGain=0.000000 maxRC=77419.081543 wallSec=0.009585 pricingSec=0.006579 cplexSolveSec=0.001862
+    [CG] 列生成开始，初始列数=446
+    [CG] CG iter 16: obj=1932961.379825, maxRC=75456.863989, +24 cols
+    [CG]   [DIAG] iter=16 posCols=24 newCols=24 effImprove=24 updated=0
+    [CG] CG iter 17: obj=1932961.379825, maxRC=53432.538751, +11 cols
+    [CG]   [DIAG] iter=17 posCols=11 newCols=11 effImprove=11 updated=0
+    [CG] CG iter 18: obj=1932961.379825, maxRC=27403.238792, +9 cols
+    [CG]   [DIAG] iter=18 posCols=9 newCols=8 effImprove=9 updated=1
+    [CG] CG iter 19: obj=1932961.379825, maxRC=2066.651855, +4 cols
+    [CG]   [DIAG] iter=19 posCols=4 newCols=3 effImprove=4 updated=1
+    [CG] 列生成收敛，共 20 轮迭代
+    [CG] [CG-NODE] depth=1 exit=CERTIFIED certified=1 feasible=1 iters=5 generatedColsBeforeNode=214 newCols=46 posCandidates=48 duplicateCandidates=2 updatedCols=2 zeroObjImproveIters=4 objFirst=1932961.379825 objLast=1932961.379825 objGain=-0.000000 maxRC=75456.863989 wallSec=0.010620 pricingSec=0.007756 cplexSolveSec=0.001814
+    [CG] [BB-INCUMBENT] selection=2 node=1 previous=1904489.774190 value=1932961.379825 active=1
+    [CG] [BB-NODESEL] strategy=hybrid choice=dfs eligibleCount=1 active=1 gap=0.002727
+    [CG] [BB-INCUMBENT] selection=3 node=1 previous=1932961.379825 value=1938233.519265 active=0
+      [BB] 分支定界结束：处理 3 节点，剪枝 0，剩余活跃 0，整数解 3，状态=OPTIMAL，最好可行 obj=1938233.519265，gap=0.000000

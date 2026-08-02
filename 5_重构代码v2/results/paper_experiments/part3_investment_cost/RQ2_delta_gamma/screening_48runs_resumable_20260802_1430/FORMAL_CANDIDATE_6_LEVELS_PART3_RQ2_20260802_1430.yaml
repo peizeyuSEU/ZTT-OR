@@ -1,0 +1,11 @@
+metadata:
+  status: CANDIDATE_NOT_FROZEN
+  user_confirmation_required: true
+  experiment_stage: FORMAL_CANDIDATE_ONLY
+  formal_paper_statistics: false
+selection_rule: preserve baseline; cover low/mid/high and turning points; apply degeneracy and redundancy diagnostics; user confirmation required
+selected_delta_levels: [500, 1000, 3000, 5000, 10000, 15000]
+selected_gamma_levels: [0.1, 0.2, 0.4, 0.5, 0.7, 0.9]
+shared_baseline: delta=3000.0, gamma=0.5
+expected_unique_runs: 110
+excluded_candidates: not automatically deleted; see RQ2_FORMAL_CANDIDATE_MATRIX_COMPARISON.md
