@@ -1,8 +1,14 @@
 {
-  "batch_status": "DRY_RUN",
-  "pending_count": 100,
-  "running_count": 0,
-  "completed_count": 0,
+  "batch_status": "PAUSED_FOR_PART2_RQ1",
+  "pending_count": 2,
+  "running_count": 1,
+  "completed_count": 97,
   "failed_count": 0,
-  "interrupted_count": 0
+  "interrupted_count": 0,
+  "controller_running": false,
+  "pause_requested_at": "2026-08-02T10:46:52+08:00",
+  "pause_reason": "user_requested_switch_to_part2_rq1",
+  "current_task": "30x100 seed=808 interrupted",
+  "next_resume_task": "30x100 seed=808 rerun using independent attempt directory",
+  "updated_at": "2026-08-02T10:46:52+08:00"
 }
