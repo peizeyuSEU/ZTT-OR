@@ -15,7 +15,7 @@ integer_solution: 100_of_100
 cache_rate_definition: actual_fitness_cache_hits / fitness_requests
 cache_rate_aggregation: mean_of_per_run_rates; sample_sd_ddof_1
 interrupted_attempt_preserved: true
-interrupted_attempt_excluded: false
+interrupted_attempt_in_formal_statistics: false
 seed_808_official_source: attempt_05
 correction_type: derived_postprocessing_only
 solver_rerun: false
