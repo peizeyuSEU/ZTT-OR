@@ -1,0 +1,53 @@
+metadata:
+  document_name: FORMAL_EXPERIMENT_MATRIX_PART3_RQ2
+  status: TEMPLATE_NOT_FROZEN
+  generated_after_screening: true
+  formal_algorithm_commit: 0dd725354732f9b8011e9e7e8540e0e64a3ff223
+  formal_algorithm_tag: paper-exp-baseline-20260801
+
+selection_source:
+  screening_matrix: EXPLORATORY_SCREENING_MATRIX_PART3_RQ2_20260802_1235.yaml
+  selection_protocol: PART3_RQ2_FORMAL_LEVEL_SELECTION_PROTOCOL_20260802_1235.md
+  selection_report: TO_BE_FILLED
+  user_confirmation: REQUIRED
+
+representative_instance:
+  size_id: 10x30
+  num_dc: 10
+  num_retailers: 30
+
+formal_random_seeds:
+  - 101
+  - 202
+  - 303
+  - 404
+  - 505
+  - 606
+  - 707
+  - 808
+  - 909
+  - 1010
+
+delta_formal:
+  fixed_investment_exponent: 0.5
+  selected_levels: TO_BE_FILLED
+  baseline_must_include: 3000.0
+
+gamma_formal:
+  fixed_delta: 3000.0
+  selected_levels: TO_BE_FILLED
+  baseline_must_include: 0.5
+
+shared_baseline:
+  delta: 3000.0
+  investment_exponent: 0.5
+  run_once_per_seed: true
+
+formal_run_count:
+  unique_levels_formula: "10 * (number_delta_levels + number_gamma_levels - 1)"
+  unique_formal_runs: TO_BE_FILLED
+
+status_boundary:
+  screening_results_in_formal_statistics: false
+  a3_must_remain_paused: true
+  part4_part5_must_not_start: true
