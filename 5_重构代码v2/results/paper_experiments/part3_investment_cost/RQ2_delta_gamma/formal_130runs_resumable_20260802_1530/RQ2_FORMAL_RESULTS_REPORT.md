@@ -16,3 +16,14 @@ Part4_status: NOT_STARTED
 Part5_status: NOT_STARTED
 final_research_conclusions_written: false
 paper_narrative_written: false
+
+## Consistency finalization
+
+consistency_audit_status: COMPLETE
+screening_consistency_comparison: REAL_FIELD_COMPARISON (39 common task rows)
+rq1_baseline_consistency_comparison: REAL_FIELD_COMPARISON (10 seeds)
+empty_field_treated_as_false: false
+RQ2 interpretation: PENDING_USER_REVIEW
+A3 status: FINAL_COMPLETE_AND_FROZEN
+Part4 status: NOT_STARTED
+Part5 status: NOT_STARTED
