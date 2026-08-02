@@ -9,3 +9,24 @@ failed: 0
 time_fields: numeric wall_time_sec,user_time_sec,system_time_sec
 outer_inner_statuses: separated
 sample_sd_ddof: 1
+
+# Final w-vector reproducibility record
+w_vector_schema_version: 2
+w_vector_expected_length_rule: equals_num_dc
+w_vector_order_rule: dc_0_to_dc_num_dc_minus_1
+w_vector_raw_source: result.csv:best_w
+w_vector_normalization_status: 20_of_20_VALID_EXACT_LENGTH
+mean_positive_w_denominator: positive_candidate_dcs
+mean_all_candidate_w_denominator: num_dc
+mean_open_dc_w_denominator: open_dc_count
+correction_type: derived_result_normalization_only
+raw_solver_outputs_modified: false
+solver_rerun_required: false
+primary_profit_results_changed: false
+primary_emission_results_changed: false
+investment_cost_results_changed: false
+network_structure_results_changed: false
+global_w_vector_audit_commit: 24856e9ef00dd4d8045c3cb8eb12fcea0fa34c2b
+rq1_w_vector_correction_commit: 4448a25ca201fd33223866ac8058c619d49fecff
+a3_w_vector_validation_commit: 08f8a6f5d205f913d13ed51e3304d73a039712e2
+
