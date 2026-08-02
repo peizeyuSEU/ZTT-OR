@@ -18,6 +18,15 @@ def validate(run_dir, nd=None, nr=None, seed=None):
     if not re.search(r"hasIntegerSolution\s*[:=]\s*(true|1)|integer solution\s*(true|found)|整数可行",text,re.I): errors.append("integer_solution_not_confirmed")
     bad=re.findall(r"SOLVER_ERROR|CPLEX license failure|fork failure|thread failure|file collision|configuration mismatch",text,re.I)
     if bad: errors.append("prohibited_error:"+",".join(sorted(set(bad))))
+    # If the frozen launcher exposes best_w, require a complete candidate-DC vector.
+    if (p/'result.csv').exists() and nd is not None:
+        try:
+            rr=list(csv.DictReader((p/'result.csv').open(newline='')))[-1]
+            if rr.get('best_w','').strip():
+                vals=[float(x) for x in rr['best_w'].split(';') if x.strip()]
+                if len(vals)!=int(nd): errors.append(f"w_vector_length:{len(vals)} != num_dc:{nd}")
+                if any(not (0.0-1e-9 <= x <= 1.0+1e-9) for x in vals): errors.append('w_vector_out_of_range')
+        except Exception as e: errors.append('w_vector_parse_error:'+str(e))
     return (not errors), errors
 def main():
     if len(sys.argv)<2: raise SystemExit("usage: a3_validate_run.py RUN_DIR [nd nr seed]")
