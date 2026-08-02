@@ -1,0 +1,72 @@
+[GA] 初始化完成，规模 10×30
+[GA] 固定w模式，w = [0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000]
+  [BP] 固定w求解开始，w=[0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000]
+    [CG] 列生成开始，初始列数=310
+    [CG] CG iter 1: obj=983582.150827, maxRC=685080.987878, +30 cols
+    [CG]   [DIAG] iter=1 posCols=30 newCols=30 effImprove=30 updated=0
+    [CG] CG iter 2: obj=1546669.968545, maxRC=225949.498267, +30 cols
+    [CG]   [DIAG] iter=2 posCols=30 newCols=30 effImprove=30 updated=0
+    [CG] CG iter 3: obj=1751279.200042, maxRC=174231.801611, +28 cols
+    [CG]   [DIAG] iter=3 posCols=28 newCols=27 effImprove=28 updated=1
+    [CG] CG iter 4: obj=1810247.184108, maxRC=116854.449981, +25 cols
+    [CG]   [DIAG] iter=4 posCols=25 newCols=25 effImprove=25 updated=0
+    [CG] CG iter 5: obj=1836950.047537, maxRC=51137.415016, +23 cols
+    [CG]   [DIAG] iter=5 posCols=23 newCols=23 effImprove=23 updated=0
+    [CG] CG iter 6: obj=1866134.620245, maxRC=52059.014123, +20 cols
+    [CG]   [DIAG] iter=6 posCols=20 newCols=20 effImprove=20 updated=0
+    [CG] CG iter 7: obj=1884975.347066, maxRC=24825.556249, +16 cols
+    [CG]   [DIAG] iter=7 posCols=16 newCols=16 effImprove=16 updated=0
+    [CG] CG iter 8: obj=1902399.497650, maxRC=30616.072779, +5 cols
+    [CG]   [DIAG] iter=8 posCols=5 newCols=4 effImprove=5 updated=1
+    [CG] CG iter 9: obj=1919674.529193, maxRC=14223.934641, +4 cols
+    [CG]   [DIAG] iter=9 posCols=4 newCols=4 effImprove=4 updated=0
+    [CG] CG iter 10: obj=1919674.529193, maxRC=12299.655259, +1 cols
+    [CG]   [DIAG] iter=10 posCols=1 newCols=1 effImprove=1 updated=0
+    [CG] CG iter 11: obj=1919674.529193, maxRC=6092.326897, +1 cols
+    [CG]   [DIAG] iter=11 posCols=1 newCols=1 effImprove=1 updated=0
+    [CG] CG iter 12: obj=1925766.856090, maxRC=203.567635, +1 cols
+    [CG]   [DIAG] iter=12 posCols=1 newCols=1 effImprove=1 updated=0
+    [CG] 列生成收敛，共 13 轮迭代
+    [CG] [CG-NODE] depth=0 exit=CERTIFIED certified=1 feasible=1 iters=13 generatedColsBeforeNode=0 newCols=182 posCandidates=184 duplicateCandidates=2 updatedCols=2 zeroObjImproveIters=3 objFirst=983582.150827 objLast=1925766.856090 objGain=942184.705262 maxRC=685080.987878 wallSec=0.102633 pricingSec=0.077024 cplexSolveSec=0.004797
+      [BB] 根节点即为整数解，obj=1925766.856090
+  [BP] 固定w求解适应度 = 2125766.856090（1已处理节点，13 CG迭代）
+
+========== 时间分布报告（墙钟树） ==========
+总耗时                  0.1033s (100%)
+  GA 搜索                   0.0000s (   0.0%)
+  总耗时 other             0.1033s ( 100.0%)
+  后处理                   0.0000s (   0.0%)
+  日志输出                0.0000s (   0.0%)
+        列生成(CG)               0.1026s (  99.8%)
+        分支定界(BB)            0.0002s (   0.2%)
+        BP other(墙钟)            0.0000s (   0.0%)
+          CPLEX构建                 0.0188s (  18.4%)
+          CPLEX求解                 0.0048s (   4.7%)
+          定价子问题(PS)         0.0770s (  75.0%)
+          CG other                    0.0020s (   1.9%)
+
+========== 时间分布报告（诊断树） ==========
+BP墙钟总时间             0.1028s (100%)
+  列生成(CG)               0.1026s (  99.8%)
+  分支定界(BB)            0.0002s (   0.2%)
+  并行fork                  0.0000s (   0.0%)
+  并行pipe I/O              0.0000s (   0.0%)
+  并行wait                  0.0000s (   0.0%)
+  并行merge                 0.0000s (   0.0%)
+  BP未归类(other)          0.0000s (   0.0%)
+    CPLEX构建                 0.0188s (  18.4%)
+    CPLEX求解                 0.0048s (   4.7%)
+    定价子问题(PS)         0.0770s (  75.0%)
+    CG other                    0.0020s (   1.9%)
+==========================================
+===== 求解统计 =====
+分支决策次数（旧branch_nodes口径）: 0
+已处理节点数: 1
+剪枝节点数: 0
+累计未处理活跃节点数: 0
+列生成迭代次数: 13
+总列数: 182
+平均每节点CG迭代: 13.0000
+平均每节点生成列: 182.0000
+平均每迭代加列: 14.0000
+=========================
