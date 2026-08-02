@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/home/peizeyu2026/smart_wolf_project/ZTT-OR/20260715 ZTT-OR/5_重构代码v2/6_数值实验/05_运行脚本/Part3_RQ2/rq2_screening_controller.py", line 106, in <module>
+    if __name__=='__main__': raise SystemExit(main())
+  File "/home/peizeyu2026/smart_wolf_project/ZTT-OR/20260715 ZTT-OR/5_重构代码v2/6_数值实验/05_运行脚本/Part3_RQ2/rq2_screening_controller.py", line 91, in main
+    for x,r in out:w.writerow([x[0],101,x[1][0],x[2], 'PASS' if r[0] else 'FAIL',r[1]])
+TypeError: 'int' object is not subscriptable
