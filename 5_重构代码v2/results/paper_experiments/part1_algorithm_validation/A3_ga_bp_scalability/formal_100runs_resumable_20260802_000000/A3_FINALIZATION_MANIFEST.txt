@@ -1,10 +1,27 @@
-A3_FORMAL_COMPLETE_AND_FROZEN
-A3_FORMAL_RUNS_100_OF_100
-failed=0
-completed_unique_keys=100
-duplicate_keys=0
-missing_keys=0
-A3=FINAL_COMPLETE_AND_FROZEN
-RQ2=FINAL_COMPLETE_AND_FROZEN
-Part4=NOT_STARTED
-Part5=NOT_STARTED
+A3_FINALIZATION_MANIFEST
+final_status: FINAL_COMPLETE_AND_FROZEN
+expected_unique_runs: 100
+completed_runs: 100
+failed_runs: 0
+missing_runs: 0
+duplicate_runs: 0
+problem_sizes: 10
+seeds_per_size: 10
+outer_algorithm: GA-BP
+outer_solution_interpretation: HEURISTIC_BEST_FOUND
+global_optimality_claim: false
+final_inner_bp_optimal: 100_of_100
+integer_solution: 100_of_100
+cache_rate_definition: actual_fitness_cache_hits / fitness_requests
+cache_rate_aggregation: mean_of_per_run_rates; sample_sd_ddof_1
+interrupted_attempt_preserved: true
+interrupted_attempt_excluded: false
+seed_808_official_source: attempt_05
+correction_type: derived_postprocessing_only
+solver_rerun: false
+raw_outputs_modified: false
+src_include_modified: false
+RQ2_status: FINAL_COMPLETE_AND_FROZEN
+Part4_status: NOT_STARTED
+Part5_status: NOT_STARTED
+consistency_audit_status: COMPLETE
