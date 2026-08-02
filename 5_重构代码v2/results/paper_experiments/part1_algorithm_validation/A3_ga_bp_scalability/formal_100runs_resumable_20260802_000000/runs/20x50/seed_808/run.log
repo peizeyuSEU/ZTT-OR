@@ -1,0 +1,247 @@
+[GA] 初始化完成，规模 20×50
+[GA] 遗传算法开始，种群大小=30，最大代数=50，编码位数=10
+[GA] 代数 0: Best=4246263.38, Avg=4164427.76, Worst=4093328.54, Valid=30/30, 耗时=33.89s
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=5020 加列=41332 BB分支=195
+  ├─ 并行墙钟=33.8882s | 串行等效(ΣBP)=190.1318s | 加速比=5.61x
+  ├─ 管理开销=-156.2436s (fork=0.0048 wait=33.8828 merge=0.0005)
+  └─ CG明细: gen_logs/run_gen0_ind{0..29}.log
+[GA] 代数 1: Best=4248463.78, Avg=4188528.89, Worst=4103756.71, Valid=30/30, 耗时=27.40s (连续1代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=4400 加列=37067 BB分支=165
+  ├─ 并行墙钟=27.3953s | 串行等效(ΣBP)=165.1164s | 加速比=6.03x
+  ├─ 管理开销=-137.7211s (fork=0.0048 wait=27.3899 merge=0.0005)
+  └─ CG明细: gen_logs/run_gen1_ind{0..29}.log
+[GA] 代数 2: Best=4248929.29, Avg=4201003.78, Worst=4126005.09, Valid=30/30, 耗时=15.40s (连续2代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=2653 加列=26570 BB分支=89
+  ├─ 并行墙钟=15.3979s | 串行等效(ΣBP)=105.0272s | 加速比=6.82x
+  ├─ 管理开销=-89.6294s (fork=0.0043 wait=15.3931 merge=0.0004)
+  └─ CG明细: gen_logs/run_gen2_ind{0..29}.log
+[GA] 代数 3: Best=4279318.60, Avg=4214629.96, Worst=4158047.67, Valid=30/30, 耗时=21.30s
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=3579 加列=32481 BB分支=124
+  ├─ 并行墙钟=21.2962s | 串行等效(ΣBP)=128.4952s | 加速比=6.03x
+  ├─ 管理开销=-107.1990s (fork=0.0039 wait=21.2918 merge=0.0004)
+  └─ CG明细: gen_logs/run_gen3_ind{0..29}.log
+[GA] 代数 4: Best=4286007.33, Avg=4220698.83, Worst=4173356.71, Valid=30/30, 耗时=19.90s
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=3048 加列=29615 BB分支=104
+  ├─ 并行墙钟=19.9027s | 串行等效(ΣBP)=120.1896s | 加速比=6.04x
+  ├─ 管理开销=-100.2869s (fork=0.0048 wait=19.8973 merge=0.0004)
+  └─ CG明细: gen_logs/run_gen4_ind{0..29}.log
+[GA] 代数 5: Best=4288847.64, Avg=4244138.22, Worst=4199053.63, Valid=30/30, 耗时=9.97s (连续1代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=1373 加列=18381 BB分支=35
+  ├─ 并行墙钟=9.9747s | 串行等效(ΣBP)=59.4012s | 加速比=5.96x
+  ├─ 管理开销=-49.4264s (fork=0.0031 wait=9.9712 merge=0.0003)
+  └─ CG明细: gen_logs/run_gen5_ind{0..29}.log
+[GA] 代数 6: Best=4290749.13, Avg=4255579.08, Worst=4193461.30, Valid=30/30, 耗时=8.80s (连续2代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=1162 加列=19538 BB分支=16
+  ├─ 并行墙钟=8.8047s | 串行等效(ΣBP)=56.8466s | 加速比=6.46x
+  ├─ 管理开销=-48.0419s (fork=0.0040 wait=8.8003 merge=0.0004)
+  └─ CG明细: gen_logs/run_gen6_ind{0..29}.log
+[GA] 代数 7: Best=4290749.13, Avg=4264737.39, Worst=4226727.40, Valid=30/30, 耗时=11.55s (连续3代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=1075 加列=17620 BB分支=16
+  ├─ 并行墙钟=11.5518s | 串行等效(ΣBP)=50.2944s | 加速比=4.35x
+  ├─ 管理开销=-38.7426s (fork=0.0041 wait=11.5473 merge=0.0004)
+  └─ CG明细: gen_logs/run_gen7_ind{0..29}.log
+[GA] 代数 8: Best=4290749.13, Avg=4271845.93, Worst=4238584.85, Valid=30/30, 耗时=7.04s (连续4代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=933 加列=18509 BB分支=6
+  ├─ 并行墙钟=7.0440s | 串行等效(ΣBP)=50.4896s | 加速比=7.17x
+  ├─ 管理开销=-43.4457s (fork=0.0042 wait=7.0393 merge=0.0004)
+  └─ CG明细: gen_logs/run_gen8_ind{0..29}.log
+[GA] 代数 9: Best=4290749.13, Avg=4275291.24, Worst=4240919.71, Valid=30/30, 耗时=8.13s (连续5代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=1064 加列=16620 BB分支=17
+  ├─ 并行墙钟=8.1297s | 串行等效(ΣBP)=45.9864s | 加速比=5.66x
+  ├─ 管理开销=-37.8567s (fork=0.0033 wait=8.1260 merge=0.0003)
+  └─ CG明细: gen_logs/run_gen9_ind{0..29}.log
+[GA] 代数 10: Best=4290758.39, Avg=4275236.90, Worst=4245248.52, Valid=30/30, 耗时=7.02s (连续6代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=895 加列=17693 BB分支=6
+  ├─ 并行墙钟=7.0226s | 串行等效(ΣBP)=47.0351s | 加速比=6.70x
+  ├─ 管理开销=-40.0125s (fork=0.0037 wait=7.0186 merge=0.0003)
+  └─ CG明细: gen_logs/run_gen10_ind{0..29}.log
+[GA] 代数 11: Best=4293912.86, Avg=4280931.97, Worst=4259295.95, Valid=30/30, 耗时=7.47s (连续7代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=1097 加列=18892 BB分支=19
+  ├─ 并行墙钟=7.4711s | 串行等效(ΣBP)=48.1692s | 加速比=6.45x
+  ├─ 管理开销=-40.6980s (fork=0.0035 wait=7.4672 merge=0.0003)
+  └─ CG明细: gen_logs/run_gen11_ind{0..29}.log
+[GA] 代数 12: Best=4298442.15, Avg=4283210.99, Worst=4261338.67, Valid=30/30, 耗时=9.25s
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=1318 加列=19293 BB分支=25
+  ├─ 并行墙钟=9.2540s | 串行等效(ΣBP)=50.4183s | 加速比=5.45x
+  ├─ 管理开销=-41.1643s (fork=0.0041 wait=9.2495 merge=0.0003)
+  └─ CG明细: gen_logs/run_gen12_ind{0..29}.log
+[GA] 代数 13: Best=4298442.15, Avg=4284378.28, Worst=4256997.66, Valid=30/30, 耗时=7.47s (连续1代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=907 加列=15801 BB分支=10
+  ├─ 并行墙钟=7.4673s | 串行等效(ΣBP)=40.3575s | 加速比=5.40x
+  ├─ 管理开销=-32.8902s (fork=0.0034 wait=7.4635 merge=0.0003)
+  └─ CG明细: gen_logs/run_gen13_ind{0..29}.log
+[GA] 代数 14: Best=4298464.13, Avg=4284313.44, Worst=4266985.56, Valid=30/30, 耗时=6.87s (连续2代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=1014 加列=17378 BB分支=12
+  ├─ 并行墙钟=6.8721s | 串行等效(ΣBP)=44.8412s | 加速比=6.53x
+  ├─ 管理开销=-37.9691s (fork=0.0041 wait=6.8675 merge=0.0004)
+  └─ CG明细: gen_logs/run_gen14_ind{0..29}.log
+[GA] 代数 15: Best=4298486.09, Avg=4288154.39, Worst=4268706.72, Valid=30/30, 耗时=6.53s (连续3代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=924 加列=18383 BB分支=4
+  ├─ 并行墙钟=6.5321s | 串行等效(ΣBP)=44.1038s | 加速比=6.75x
+  ├─ 管理开销=-37.5717s (fork=0.0036 wait=6.5281 merge=0.0003)
+  └─ CG明细: gen_logs/run_gen15_ind{0..29}.log
+[GA] 代数 16: Best=4301344.43, Avg=4291945.18, Worst=4260068.03, Valid=30/30, 耗时=11.78s (连续4代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=1183 加列=17790 BB分支=19
+  ├─ 并行墙钟=11.7767s | 串行等效(ΣBP)=44.9053s | 加速比=3.81x
+  ├─ 管理开销=-33.1286s (fork=0.0031 wait=11.7732 merge=0.0003)
+  └─ CG明细: gen_logs/run_gen16_ind{0..29}.log
+[GA] 代数 17: Best=4301389.61, Avg=4295029.59, Worst=4270973.43, Valid=30/30, 耗时=6.73s (连续5代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=800 加列=15124 BB分支=6
+  ├─ 并行墙钟=6.7311s | 串行等效(ΣBP)=36.1766s | 加速比=5.37x
+  ├─ 管理开销=-29.4455s (fork=0.0035 wait=6.7272 merge=0.0003)
+  └─ CG明细: gen_logs/run_gen17_ind{0..29}.log
+[GA] 代数 18: Best=4301389.61, Avg=4294781.30, Worst=4252148.42, Valid=30/30, 耗时=5.31s (连续6代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=677 加列=14965 BB分支=0
+  ├─ 并行墙钟=5.3052s | 串行等效(ΣBP)=37.2014s | 加速比=7.01x
+  ├─ 管理开销=-31.8962s (fork=0.0041 wait=5.3006 merge=0.0003)
+  └─ CG明细: gen_logs/run_gen18_ind{0..29}.log
+[GA] 代数 19: Best=4301389.61, Avg=4291914.11, Worst=4248755.47, Valid=30/30, 耗时=9.95s (连续7代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=1105 加列=16820 BB分支=20
+  ├─ 并行墙钟=9.9523s | 串行等效(ΣBP)=43.9085s | 加速比=4.41x
+  ├─ 管理开销=-33.9562s (fork=0.0037 wait=9.9482 merge=0.0003)
+  └─ CG明细: gen_logs/run_gen19_ind{0..29}.log
+[GA] 代数 20: Best=4302818.72, Avg=4294934.31, Worst=4263753.09, Valid=30/30, 耗时=6.17s (连续8代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=764 加列=16752 BB分支=0
+  ├─ 并行墙钟=6.1692s | 串行等效(ΣBP)=41.1599s | 加速比=6.67x
+  ├─ 管理开销=-34.9908s (fork=0.0039 wait=6.1647 merge=0.0004)
+  └─ CG明细: gen_logs/run_gen20_ind{0..29}.log
+[GA] 代数 21: Best=4302818.72, Avg=4294719.72, Worst=4273072.43, Valid=30/30, 耗时=5.14s (连续9代未提升)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=820 加列=15959 BB分支=5
+  ├─ 并行墙钟=5.1355s | 串行等效(ΣBP)=39.2695s | 加速比=7.65x
+  ├─ 管理开销=-34.1340s (fork=0.0042 wait=5.1309 merge=0.0003)
+  └─ CG明细: gen_logs/run_gen21_ind{0..29}.log
+[GA] 代数 22: Best=4302818.72, Avg=4294665.08, Worst=4252224.75, Valid=30/30, 耗时=6.58s (连续10代未提升 → 提前停止)
+  ├─ 求解: 30 个体 fork 并行 | CG迭代=959 加列=16942 BB分支=11
+  ├─ 并行墙钟=6.5784s | 串行等效(ΣBP)=43.3203s | 加速比=6.59x
+  ├─ 管理开销=-36.7420s (fork=0.0042 wait=6.5736 merge=0.0003)
+  └─ CG明细: gen_logs/run_gen22_ind{0..29}.log
+
+========== 并行效率总报告 ==========
+并行代数            : 23
+并行墙钟(累计)      : 259.6527s
+串行等效(ΣBP累计)   : 1532.8451s
+净管理开销          : -1273.1925s (-490.3%)
+  ├─ fork  : 0.0906s
+  ├─ wait  : 259.5517s
+  └─ merge : 0.0081s
+加速比              : 5.90x
+结论: 加速比 > 1，并行有效收益。
+====================================
+  [BP] 最优解重新评估开始，w=[0.014663, 0.085044, 0.836755, 0.421310, 0.483871, 0.215054, 0.386119, 0.749756, 0.924731, 0.485826, 0.448680, 0.264907, 0.664712, 0.323558, 0.502444, 0.150538, 0.254154, 0.499511, 0.207234, 0.176931]
+    [CG] 列生成开始，初始列数=1020
+    [CG] CG iter 1: obj=1784649.806599, maxRC=2798864.977746, +60 cols
+    [CG]   [DIAG] iter=1 posCols=60 newCols=60 effImprove=60 updated=0
+    [CG] CG iter 2: obj=3258240.096195, maxRC=466790.064813, +46 cols
+    [CG]   [DIAG] iter=2 posCols=46 newCols=46 effImprove=46 updated=0
+    [CG] CG iter 3: obj=3607036.603601, maxRC=885219.720524, +55 cols
+    [CG]   [DIAG] iter=3 posCols=55 newCols=55 effImprove=55 updated=0
+    [CG] CG iter 4: obj=3639748.636691, maxRC=779758.701376, +54 cols
+    [CG]   [DIAG] iter=4 posCols=54 newCols=54 effImprove=54 updated=0
+    [CG] CG iter 5: obj=3642892.192812, maxRC=593213.725485, +48 cols
+    [CG]   [DIAG] iter=5 posCols=48 newCols=48 effImprove=48 updated=0
+    [CG] CG iter 6: obj=3682257.269310, maxRC=410200.886729, +43 cols
+    [CG]   [DIAG] iter=6 posCols=43 newCols=43 effImprove=43 updated=0
+    [CG] CG iter 7: obj=3697395.215077, maxRC=302194.261451, +32 cols
+    [CG]   [DIAG] iter=7 posCols=32 newCols=32 effImprove=32 updated=0
+    [CG] CG iter 8: obj=3744949.560069, maxRC=185598.233979, +28 cols
+    [CG]   [DIAG] iter=8 posCols=28 newCols=28 effImprove=28 updated=0
+    [CG] CG iter 9: obj=3815207.847655, maxRC=213203.796873, +32 cols
+    [CG]   [DIAG] iter=9 posCols=32 newCols=32 effImprove=32 updated=0
+    [CG] CG iter 10: obj=3867623.822095, maxRC=161734.791070, +27 cols
+    [CG]   [DIAG] iter=10 posCols=27 newCols=27 effImprove=27 updated=0
+    [CG] CG iter 11: obj=3914930.224565, maxRC=155950.821431, +30 cols
+    [CG]   [DIAG] iter=11 posCols=30 newCols=30 effImprove=30 updated=0
+    [CG] CG iter 12: obj=3947372.674790, maxRC=116905.242551, +25 cols
+    [CG]   [DIAG] iter=12 posCols=25 newCols=24 effImprove=25 updated=1
+    [CG] CG iter 13: obj=3967548.084179, maxRC=103119.268243, +25 cols
+    [CG]   [DIAG] iter=13 posCols=25 newCols=25 effImprove=25 updated=0
+    [CG] CG iter 14: obj=3987453.398034, maxRC=74065.558957, +19 cols
+    [CG]   [DIAG] iter=14 posCols=19 newCols=19 effImprove=19 updated=0
+    [CG] CG iter 15: obj=4022814.573469, maxRC=74968.671750, +20 cols
+    [CG]   [DIAG] iter=15 posCols=20 newCols=20 effImprove=20 updated=0
+    [CG] CG iter 16: obj=4038497.104417, maxRC=60442.932341, +17 cols
+    [CG]   [DIAG] iter=16 posCols=17 newCols=17 effImprove=17 updated=0
+    [CG] CG iter 17: obj=4080498.563669, maxRC=56186.739881, +20 cols
+    [CG]   [DIAG] iter=17 posCols=20 newCols=19 effImprove=20 updated=1
+    [CG] CG iter 18: obj=4080498.563669, maxRC=34660.327003, +18 cols
+    [CG]   [DIAG] iter=18 posCols=18 newCols=17 effImprove=18 updated=1
+    [CG] CG iter 19: obj=4083303.514826, maxRC=41940.010756, +15 cols
+    [CG]   [DIAG] iter=19 posCols=15 newCols=14 effImprove=15 updated=1
+    [CG] CG iter 20: obj=4089199.203509, maxRC=32025.042332, +15 cols
+    [CG]   [DIAG] iter=20 posCols=15 newCols=14 effImprove=15 updated=1
+    [CG] CG iter 21: obj=4089199.203509, maxRC=21337.464774, +12 cols
+    [CG]   [DIAG] iter=21 posCols=12 newCols=12 effImprove=12 updated=0
+    [CG] CG iter 22: obj=4102818.721345, maxRC=26460.518756, +9 cols
+    [CG]   [DIAG] iter=22 posCols=9 newCols=9 effImprove=9 updated=0
+    [CG] CG iter 23: obj=4102818.721345, maxRC=21574.330775, +7 cols
+    [CG]   [DIAG] iter=23 posCols=7 newCols=7 effImprove=7 updated=0
+    [CG] CG iter 24: obj=4102818.721345, maxRC=12829.703634, +7 cols
+    [CG]   [DIAG] iter=24 posCols=7 newCols=7 effImprove=7 updated=0
+    [CG] CG iter 25: obj=4102818.721345, maxRC=17158.488011, +7 cols
+    [CG]   [DIAG] iter=25 posCols=7 newCols=7 effImprove=7 updated=0
+    [CG] CG iter 26: obj=4102818.721345, maxRC=15145.828909, +4 cols
+    [CG]   [DIAG] iter=26 posCols=4 newCols=4 effImprove=4 updated=0
+    [CG] CG iter 27: obj=4102818.721345, maxRC=15826.381182, +7 cols
+    [CG]   [DIAG] iter=27 posCols=7 newCols=7 effImprove=7 updated=0
+    [CG] CG iter 28: obj=4102818.721345, maxRC=13210.378227, +6 cols
+    [CG]   [DIAG] iter=28 posCols=6 newCols=6 effImprove=6 updated=0
+    [CG] CG iter 29: obj=4102818.721345, maxRC=6317.640112, +2 cols
+    [CG]   [DIAG] iter=29 posCols=2 newCols=2 effImprove=2 updated=0
+    [CG] CG iter 30: obj=4102818.721345, maxRC=4938.668059, +4 cols
+    [CG]   [DIAG] iter=30 posCols=4 newCols=4 effImprove=4 updated=0
+    [CG] CG iter 31: obj=4102818.721345, maxRC=2159.305214, +3 cols
+    [CG]   [DIAG] iter=31 posCols=3 newCols=3 effImprove=3 updated=0
+    [CG] CG iter 32: obj=4102818.721345, maxRC=405.153860, +2 cols
+    [CG]   [DIAG] iter=32 posCols=2 newCols=2 effImprove=2 updated=0
+    [CG] 列生成收敛，共 33 轮迭代
+    [CG] [CG-NODE] depth=0 exit=CERTIFIED certified=1 feasible=1 iters=33 generatedColsBeforeNode=0 newCols=694 posCandidates=699 duplicateCandidates=5 updatedCols=5 zeroObjImproveIters=13 objFirst=1784649.806599 objLast=4102818.721345 objGain=2318168.914746 maxRC=2798864.977746 wallSec=1.771406 pricingSec=1.722467 cplexSolveSec=0.034651
+      [BB] 根节点即为整数解，obj=4102818.721345
+  [BP] 最优解重新评估适应度 = 4302818.721345（1已处理节点，33 CG迭代）
+
+========== 时间分布报告（墙钟树） ==========
+总耗时                  261.4402s (100%)
+  GA 搜索                 259.6680s (  99.3%)
+  总耗时 other             1.7723s (   0.7%)
+  后处理                   0.0000s (   0.0%)
+  日志输出                0.0000s (   0.0%)
+    选择                      0.0011s (   0.0%)
+    交叉                      0.0009s (   0.0%)
+    变异                      0.0054s (   0.0%)
+    解码                      0.0012s (   0.0%)
+    适应度评估           259.6537s ( 100.0%)
+    GA other                    0.0057s (   0.0%)
+      分支定价(BP)          259.6537s ( 100.0%)
+      评估 other                0.0000s (   0.0%)
+        列生成(CG)            1531.5698s ( 589.9%)
+        分支定界(BB)            1.2230s (   0.5%)
+        BP other(墙钟)            0.0000s (   0.0%)
+          CPLEX构建                10.1649s (   0.7%)
+          CPLEX求解                45.8844s (   3.0%)
+          定价子问题(PS)      1462.3307s (  95.5%)
+          CG other                   13.1899s (   0.9%)
+
+========== 时间分布报告（诊断树） ==========
+BP墙钟总时间             259.6537s (100%)
+  列生成(CG)            1531.5698s ( 589.9%)
+  分支定界(BB)            1.2230s (   0.5%)
+  并行fork                  0.0906s (   0.0%)
+  并行pipe I/O              0.0000s (   0.0%)
+  并行wait                259.5517s ( 100.0%)
+  并行merge                 0.0081s (   0.0%)
+  BP未归类(other)          0.0000s (   0.0%)
+    CPLEX构建                10.1649s (   0.7%)
+    CPLEX求解                45.8844s (   3.0%)
+    定价子问题(PS)      1462.3307s (  95.5%)
+    CG other                   13.1899s (   0.9%)
+==========================================
+===== 求解统计 =====
+分支决策次数（旧branch_nodes口径）: 904
+已处理节点数: 2362
+剪枝节点数: 760
+累计未处理活跃节点数: 0
+列生成迭代次数: 36770
+总列数: 479525
+平均每节点CG迭代: 15.5673
+平均每节点生成列: 203.0165
+平均每迭代加列: 13.0412
+=========================

@@ -1,0 +1,23 @@
+    [CG] 列生成开始，初始列数=18
+    [CG] CG iter 1: obj=64639.839389, maxRC=60286.115883, +9 cols
+    [CG]   [DIAG] iter=1 posCols=9 newCols=9 effImprove=9 updated=0
+    [CG] CG iter 2: obj=104359.543602, maxRC=14619.134993, +3 cols
+    [CG]   [DIAG] iter=2 posCols=3 newCols=3 effImprove=3 updated=0
+    [CG] CG iter 3: obj=107459.648557, maxRC=2926.293368, +2 cols
+    [CG]   [DIAG] iter=3 posCols=2 newCols=2 effImprove=2 updated=0
+    [CG] 列生成收敛，共 4 轮迭代
+    [CG] [CG-NODE] depth=0 exit=CERTIFIED certified=1 feasible=1 iters=4 generatedColsBeforeNode=0 newCols=14 posCandidates=14 duplicateCandidates=0 updatedCols=0 zeroObjImproveIters=0 objFirst=64639.839389 objLast=108922.795241 objGain=44282.955852 maxRC=60286.115883 wallSec=0.004910 pricingSec=0.001212 cplexSolveSec=0.001842
+      [BB] 分支定界开始，根节点LP obj=108922.795241，最大节点数=10000
+      [BB] 根节点启发式下界 LB=100915.231403（上界=108922.795241）
+    [CG] [BB-DIAG] 分支 x_{dc=0,retailer=0}, 节点数=1
+    [CG] 列生成开始，初始列数=26
+    [CG] CG iter 5: obj=104359.543602, maxRC=1134.250410, +1 cols
+    [CG]   [DIAG] iter=5 posCols=1 newCols=1 effImprove=1 updated=0
+    [CG] 列生成收敛，共 6 轮迭代
+    [CG] [CG-NODE] depth=1 exit=CERTIFIED certified=1 feasible=1 iters=2 generatedColsBeforeNode=14 newCols=1 posCandidates=1 duplicateCandidates=0 updatedCols=0 zeroObjImproveIters=1 objFirst=104359.543602 objLast=104359.543602 objGain=0.000000 maxRC=1134.250410 wallSec=0.001979 pricingSec=0.000610 cplexSolveSec=0.000805
+    [CG] 列生成开始，初始列数=26
+    [CG] 列生成收敛，共 7 轮迭代
+    [CG] [CG-NODE] depth=1 exit=CERTIFIED certified=1 feasible=1 iters=1 generatedColsBeforeNode=15 newCols=0 posCandidates=0 duplicateCandidates=0 updatedCols=0 zeroObjImproveIters=0 objFirst=108114.810915 objLast=108114.810915 objGain=0.000000 maxRC=-10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.000000 wallSec=0.001218 pricingSec=0.000249 cplexSolveSec=0.000596
+    [CG] [BB-INCUMBENT] selection=2 node=1 previous=100915.231403 value=108114.810915 active=1
+    [CG] [BB-NODESEL] strategy=hybrid choice=dfs eligibleCount=1 active=1 gap=0.000000
+      [BB] 分支定界结束：处理 3 节点，剪枝 1，剩余活跃 0，整数解 2，状态=OPTIMAL，最好可行 obj=108114.810915，gap=0.000000

@@ -1,0 +1,35 @@
+    [CG] 列生成开始，初始列数=55
+    [CG] CG iter 1: obj=370750.331644, maxRC=246488.664242, +15 cols
+    [CG]   [DIAG] iter=1 posCols=15 newCols=15 effImprove=15 updated=0
+    [CG] CG iter 2: obj=478543.782037, maxRC=76933.926617, +12 cols
+    [CG]   [DIAG] iter=2 posCols=12 newCols=12 effImprove=12 updated=0
+    [CG] CG iter 3: obj=540357.962662, maxRC=60307.256434, +9 cols
+    [CG]   [DIAG] iter=3 posCols=9 newCols=9 effImprove=9 updated=0
+    [CG] CG iter 4: obj=567854.563303, maxRC=15452.531783, +4 cols
+    [CG]   [DIAG] iter=4 posCols=4 newCols=4 effImprove=4 updated=0
+    [CG] CG iter 5: obj=572349.749605, maxRC=6794.491095, +4 cols
+    [CG]   [DIAG] iter=5 posCols=4 newCols=4 effImprove=4 updated=0
+    [CG] 列生成收敛，共 6 轮迭代
+    [CG] [CG-NODE] depth=0 exit=CERTIFIED certified=1 feasible=1 iters=6 generatedColsBeforeNode=0 newCols=44 posCandidates=44 duplicateCandidates=0 updatedCols=0 zeroObjImproveIters=0 objFirst=370750.331644 objLast=575387.200927 objGain=204636.869283 maxRC=246488.664242 wallSec=0.012462 pricingSec=0.006994 cplexSolveSec=0.002880
+      [BB] 分支定界开始，根节点LP obj=575387.200927，最大节点数=10000
+      [BB] 根节点启发式下界 LB=537997.098672（上界=575387.200927）
+    [CG] [BB-DIAG] 分支 x_{dc=0,retailer=0}, 节点数=1
+    [CG] 列生成开始，初始列数=92
+    [CG] CG iter 7: obj=574660.301947, maxRC=22629.636066, +7 cols
+    [CG]   [DIAG] iter=7 posCols=7 newCols=7 effImprove=7 updated=0
+    [CG] CG iter 8: obj=574660.301947, maxRC=6392.198030, +3 cols
+    [CG]   [DIAG] iter=8 posCols=3 newCols=3 effImprove=3 updated=0
+    [CG] 列生成收敛，共 9 轮迭代
+    [CG] [CG-NODE] depth=1 exit=CERTIFIED certified=1 feasible=1 iters=3 generatedColsBeforeNode=44 newCols=10 posCandidates=10 duplicateCandidates=0 updatedCols=0 zeroObjImproveIters=2 objFirst=574660.301947 objLast=574660.301947 objGain=0.000000 maxRC=22629.636066 wallSec=0.004175 pricingSec=0.002458 cplexSolveSec=0.001141
+    [CG] 列生成开始，初始列数=87
+    [CG] CG iter 10: obj=568653.414434, maxRC=57712.044808, +7 cols
+    [CG]   [DIAG] iter=10 posCols=7 newCols=7 effImprove=7 updated=0
+    [CG] CG iter 11: obj=568653.414434, maxRC=14783.543640, +4 cols
+    [CG]   [DIAG] iter=11 posCols=4 newCols=4 effImprove=4 updated=0
+    [CG] CG iter 12: obj=568653.414434, maxRC=3542.258565, +1 cols
+    [CG]   [DIAG] iter=12 posCols=1 newCols=1 effImprove=1 updated=0
+    [CG] 列生成收敛，共 13 轮迭代
+    [CG] [CG-NODE] depth=1 exit=CERTIFIED certified=1 feasible=1 iters=4 generatedColsBeforeNode=54 newCols=12 posCandidates=12 duplicateCandidates=0 updatedCols=0 zeroObjImproveIters=3 objFirst=568653.414434 objLast=568653.414434 objGain=0.000000 maxRC=57712.044808 wallSec=0.004503 pricingSec=0.002510 cplexSolveSec=0.001369
+    [CG] [BB-INCUMBENT] selection=2 node=1 previous=537997.098672 value=568653.414434 active=1
+    [CG] [BB-INCUMBENT] selection=3 node=1 previous=568653.414434 value=574660.301947 active=0
+      [BB] 分支定界结束：处理 3 节点，剪枝 0，剩余活跃 0，整数解 3，状态=OPTIMAL，最好可行 obj=574660.301947，gap=0.000000

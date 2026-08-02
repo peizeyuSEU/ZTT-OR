@@ -1,0 +1,21 @@
+experiment: Part 1 / RQ4 / A3 GA-BP scalability
+formal_replication: true
+queue_tasks: 100
+formal_scales: 3x5,3x10,5x10,5x20,5x30,10x30,15x30,15x50,20x50,30x100
+seeds: 101,202,303,404,505,606,707,808,909,1010
+chromosome_length: 10
+population_size: 30
+max_generation: 50
+outer_workers: 8
+cplex_threads: 1
+parallel_pricing: false
+source_algorithm_commit: 0dd725354732f9b8011e9e7e8540e0e64a3ff223
+precheck_30x100_not_in_formal_statistics: true
+3221d9f83af4c4c44af6dddf60f5af7b2aac840af09dc6b64f97abf2d468b1aa  5_重构代码v2/6_数值实验/05_运行脚本/Part1_RQ4/A3/a3_initialize_queue.py
+c40021f583dee60db8d770b3b7187847fd5b6c8741bd8e8d2efa9168163f34f7  5_重构代码v2/6_数值实验/05_运行脚本/Part1_RQ4/A3/a3_resumable_controller.py
+a13a0b3bf4d8ad33383dc5d8c907dc14640bfcd6af5f667ac1458251ba30c0d0  5_重构代码v2/6_数值实验/05_运行脚本/Part1_RQ4/A3/a3_snapshot.py
+f2f845b99bb21f4276bbc5cfea2f725b164c10ad4742e41232ce082932aacdb2  5_重构代码v2/6_数值实验/05_运行脚本/Part1_RQ4/A3/a3_status.py
+1f808cdc568bf62ee8f520c2f5894453c0781a0151119cb49e8042a4be750eaa  5_重构代码v2/6_数值实验/05_运行脚本/Part1_RQ4/A3/a3_validate_run.py
+02640bebe72395a0faa9f316e5fb42d92e1907d028898162c2349d3939cdb75d  5_重构代码v2/6_数值实验/05_运行脚本/Part1_RQ4/A3/request_pause.sh
+a00c0eb622160a35a9dabd99614b54054140173a909c3125bae17f982711f006  5_重构代码v2/6_数值实验/05_运行脚本/Part1_RQ4/A3/resume_a3.sh
+controller_commit: f278e47\ngeneration_checkpoint_resume_supported: false\nresume_granularity: one complete size-seed GA run\ninitial_queue_status: all PENDING\ndry_run_verified: true\npause_test_verified: true\nstartup_setup_attempts_preserved: controller_setup_attempts.log\nformal_tasks_failed: 0\n
