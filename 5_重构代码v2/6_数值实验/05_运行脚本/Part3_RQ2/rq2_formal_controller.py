@@ -36,10 +36,10 @@ def main():
   with sc.LOCK.open('w') as lf:
    fcntl.flock(lf,fcntl.LOCK_EX)
    for s,d,g in SCEN: out.append((s,normalize(root/f'seed_101/{s}',s,101,d,g,'FORMAL_PRECHECK')))
- with (root/'RQ2_FORMAL_PRECHECK_RESULTS.csv').open('w',newline='') as f:w=csv.writer(f);w.writerow(['scenario_id','status','notes']);w.writerows([[s,'PASS' if r[0] else 'FAIL',r[1]] for s,r in out])
- (root/'RQ2_FORMAL_PRECHECK_REPORT.md').write_text('# RQ2 formal precheck\n\n13 unique scenarios for seed 101.\n\nConclusion: '+('PASS' if all(r[0] for s,r in out) else 'FAIL')+'\n')
- (root/'PRECHECK_MANIFEST.txt').write_text('precheck_tasks: 13\nseed: 101\nformal_statistics: false\n')
- return 0 if all(r[0] for s,r in out) else 1
+  with (root/'RQ2_FORMAL_PRECHECK_RESULTS.csv').open('w',newline='') as f:w=csv.writer(f);w.writerow(['scenario_id','status','notes']);w.writerows([[s,'PASS' if r[0] else 'FAIL',r[1]] for s,r in out])
+  (root/'RQ2_FORMAL_PRECHECK_REPORT.md').write_text('# RQ2 formal precheck\n\n13 unique scenarios for seed 101.\n\nConclusion: '+('PASS' if all(r[0] for s,r in out) else 'FAIL')+'\n')
+  (root/'PRECHECK_MANIFEST.txt').write_text('precheck_tasks: 13\nseed: 101\nformal_statistics: false\n')
+  return 0 if all(r[0] for s,r in out) else 1
  if mode=='init': write_queue(root); return 0
  if mode=='run':
   q=root/'RQ2_FORMAL_RUN_QUEUE.csv'; rows=list(csv.DictReader(q.open(newline=''))); fields=list(rows[0])
