@@ -1,6 +1,18 @@
 # Part 3 / RQ2 formal results
 
-status: PART3_RQ2_FORMAL_COMPLETE
-formal_matrix_status: FORMAL_MATRIX_FINAL_FROZEN
-formal_runs: 130/130
-outer interpretation: GA-BP best-found solution with a certified final inner-BP evaluation.
+status: FINAL_COMPLETE_AND_FROZEN
+interpretation_status: PENDING_USER_REVIEW
+formal_matrix: delta=[500,1000,2000,3000,5000,10000,15000]; gamma=[0.1,0.3,0.4,0.5,0.6,0.7,0.9]
+formal_runs: 130/130; unique=130; failed=0; timeout=0
+solver_rerun_required: false
+raw_solver_results_valid: true
+correction_scope: derived_postprocessing_only
+inner_bp_status: 130/130 OPTIMAL
+outer_solution_interpretation: HEURISTIC_BEST_FOUND
+w_vector_validation: 130/130 VALID_EXACT_LENGTH, length=10, source=result.csv:best_w
+open_dc_set: reconstructed from report.txt structured DC decisions; all counts match num_dc_open
+A3_status: FINAL_COMPLETE_AND_FROZEN
+Part4_status: NOT_STARTED
+Part5_status: NOT_STARTED
+final_research_conclusions_written: false
+paper_narrative_written: false

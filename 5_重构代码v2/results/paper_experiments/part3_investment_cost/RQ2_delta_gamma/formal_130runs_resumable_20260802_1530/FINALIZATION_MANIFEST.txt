@@ -1,7 +1,46 @@
-PART3_RQ2_FORMAL_COMPLETE
-FORMAL_MATRIX_FINAL_FROZEN
-FORMAL_RUNS_130_OF_130
-FINAL_COMPLETE_AND_FROZEN
-A3=PAUSED
-Part4=NOT_STARTED
-Part5=NOT_STARTED
+final_status: FINAL_COMPLETE_AND_FROZEN
+interpretation_status: PENDING_USER_REVIEW
+formal_matrix_status: FINAL_FROZEN
+expected_unique_runs: 130
+completed_unique_runs: 130
+failed_runs: 0
+timeout_runs: 0
+duplicate_keys: 0
+missing_keys: 0
+delta_levels: 500,1000,2000,3000,5000,10000,15000
+gamma_levels: 0.1,0.3,0.4,0.5,0.6,0.7,0.9
+shared_baseline: delta_3000_gamma_0.5
+unique_result_rows: 130
+delta_rows: 70
+gamma_rows: 70
+delta_nonbaseline_paired_rows: 60
+gamma_nonbaseline_paired_rows: 60
+w_vector_schema_version: 2
+w_vector_expected_length: 10
+w_vector_order_rule: dc_0_to_dc_9
+w_vector_source: result.csv:best_w
+w_vector_valid_exact_length: 130_of_130
+open_dc_set_source: report.txt structured DC decisions
+open_dc_set_count_validation: 130_of_130
+mean_positive_w_denominator: positive_candidate_dcs
+mean_all_candidate_w_denominator: num_dc
+mean_open_dc_w_denominator: open_dc_count
+sample_sd_ddof: 1
+investment_recomputation_pass: 130_of_130
+investment_recomputation_max_abs_difference: 3.3e-10
+correction_type: derived_postprocessing_only
+raw_solver_outputs_modified: false
+solver_rerun_required: false
+solver_rerun_performed: false
+primary_profit_results_changed: false
+primary_emission_results_changed: false
+investment_cost_results_changed: false
+net_carbon_cost_results_changed: false
+best_w_results_changed: false
+instance_fingerprints_changed: false
+outer_method: GA_BP
+outer_solution_interpretation: GA_BEST_FOUND
+global_optimality_claim: false
+A3_status: FINAL_COMPLETE_AND_FROZEN
+Part4_status: NOT_STARTED
+Part5_status: NOT_STARTED

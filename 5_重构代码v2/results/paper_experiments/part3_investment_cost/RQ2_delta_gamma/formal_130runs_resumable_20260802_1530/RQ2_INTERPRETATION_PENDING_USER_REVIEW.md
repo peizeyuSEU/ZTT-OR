@@ -1,0 +1,11 @@
+data_status: FINAL_COMPLETE_AND_FROZEN
+interpretation_status: PENDING_USER_REVIEW
+formal_matrix_status: FINAL_FROZEN
+formal_runs: 130_of_130
+solver_rerun_performed: false
+derived_postprocessing_corrected: true
+screening_results_used_in_formal_statistics: false
+descriptive_statistics_generated: true
+trend_diagnostics_generated: true
+final_research_conclusions_written: false
+paper_narrative_written: false

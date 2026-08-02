@@ -1,0 +1,17 @@
+# Project status after RQ2 derived finalization
+current_git_head: 29a54d52923ca7f334c6995cee403621a47ee7c7
+A1: FINAL_COMPLETE_AND_FROZEN
+A2: FINAL_COMPLETE_AND_FROZEN
+A3: FINAL_COMPLETE_AND_FROZEN
+A3_formal_runs: 100_of_100
+A3_failed_runs: 0
+A3_inner_bp_status: 100_of_100_OPTIMAL
+A3_outer_solution_interpretation: HEURISTIC_BEST_FOUND
+RQ1: FINAL_COMPLETE_AND_FROZEN
+RQ2_data: FINAL_COMPLETE_AND_FROZEN
+RQ2_interpretation: PENDING_USER_REVIEW
+Part4: NOT_STARTED
+Part5: NOT_STARTED
+RQ2_solver_rerun_required: false
+RQ2_raw_solver_results_valid: true
+RQ2_correction_scope: derived_postprocessing_only
