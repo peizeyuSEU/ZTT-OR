@@ -94,13 +94,29 @@ def main():
  if mode=='screening':
   scenarios=[('DELTA_%05d_GAMMA_050'%d,d,.5) for d in DELTA if d!=3000]+[('DELTA_03000_GAMMA_%03d'%int(g*100),3000,g) for g in GAMMA if abs(g-.5)>1e-9]
   scenarios=[('BASELINE_DELTA_03000_GAMMA_050',3000,.5)]+scenarios
-  rows=[]
+  root.mkdir(parents=True,exist_ok=True); qpath=root/'RQ2_SCREENING_RUN_QUEUE.csv'
+  fields=['order_id','size_id','scenario_id','screening_dimension','level','random_seed','delta','gamma','status','validation_status','completion_marker','output_directory']
+  if qpath.exists(): qrows=list(csv.DictReader(qpath.open(newline='')))
+  else:
+   qrows=[]; order=1
+   for seed in SEEDS:
+    for scen,d,g in scenarios:
+     qrows.append({'order_id':str(order),'size_id':'10x30','scenario_id':scen,'screening_dimension':'delta' if g==.5 else 'gamma','level':str(d if g==.5 else g),'random_seed':str(seed),'delta':str(d),'gamma':str(g),'status':'PENDING','validation_status':'','completion_marker':'','output_directory':str(root/f'seed_{seed}/{scen}')}); order+=1
+   with qpath.open('w',newline='') as f: w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(qrows)
+  (root/'RQ2_SCREENING_BATCH_STATE.json').write_text(json.dumps({'batch_status':'INITIALIZED','total':len(qrows),'completed':0},indent=2)+'\n')
   with LOCK.open('w') as lf:
    fcntl.flock(lf,fcntl.LOCK_EX)
-   for seed in SEEDS:
-    for x in scenarios:
-     ok,msg=run_one(root,x[0],seed,x[1],x[2]); rows.append((seed,x,ok,msg))
-     if not ok: return 1
+   for r in qrows:
+    if r['status']=='COMPLETED': continue
+    r['status']='RUNNING'; r['validation_status']='RUNNING'
+    with qpath.open('w',newline='') as f: w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(qrows)
+    scen=next(x for x in scenarios if x[0]==r['scenario_id'])
+    ok,msg=run_one(root,r['scenario_id'],int(r['random_seed']),scen[1],scen[2])
+    r['status']='COMPLETED' if ok else 'FAILED'; r['validation_status']='PASS' if ok else 'FAIL'; r['completion_marker']='COMPLETED.ok' if ok else 'FAILED.txt'
+    with qpath.open('w',newline='') as f: w=csv.DictWriter(f,fieldnames=fields); w.writeheader(); w.writerows(qrows)
+    (root/'RQ2_SCREENING_BATCH_STATE.json').write_text(json.dumps({'batch_status':'RUNNING' if ok else 'FAILED','total':len(qrows),'completed':sum(x['status']=='COMPLETED' for x in qrows),'failed':sum(x['status']=='FAILED' for x in qrows)},indent=2)+'\n')
+    if not ok: return 1
+  (root/'RQ2_SCREENING_BATCH_STATE.json').write_text(json.dumps({'batch_status':'COMPLETED','total':len(qrows),'completed':len(qrows),'failed':0},indent=2)+'\n')
   return 0
  return 2
 if __name__=='__main__': raise SystemExit(main())
