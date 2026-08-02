@@ -1,0 +1,64 @@
+    [CG] 列生成开始，初始列数=310
+    [CG] CG iter 1: obj=934685.754476, maxRC=1165902.942779, +30 cols
+    [CG]   [DIAG] iter=1 posCols=30 newCols=30 effImprove=30 updated=0
+    [CG] CG iter 2: obj=1688822.817694, maxRC=253419.888199, +27 cols
+    [CG]   [DIAG] iter=2 posCols=27 newCols=27 effImprove=27 updated=0
+    [CG] CG iter 3: obj=1818172.330702, maxRC=506696.155607, +27 cols
+    [CG]   [DIAG] iter=3 posCols=27 newCols=27 effImprove=27 updated=0
+    [CG] CG iter 4: obj=1970169.451848, maxRC=263213.164336, +27 cols
+    [CG]   [DIAG] iter=4 posCols=27 newCols=27 effImprove=27 updated=0
+    [CG] CG iter 5: obj=2089743.270141, maxRC=186048.344076, +26 cols
+    [CG]   [DIAG] iter=5 posCols=26 newCols=26 effImprove=26 updated=0
+    [CG] CG iter 6: obj=2130435.179119, maxRC=103782.449312, +24 cols
+    [CG]   [DIAG] iter=6 posCols=24 newCols=24 effImprove=24 updated=0
+    [CG] CG iter 7: obj=2190453.820805, maxRC=85182.956731, +24 cols
+    [CG]   [DIAG] iter=7 posCols=24 newCols=24 effImprove=24 updated=0
+    [CG] CG iter 8: obj=2254948.384045, maxRC=53096.245062, +24 cols
+    [CG]   [DIAG] iter=8 posCols=24 newCols=24 effImprove=24 updated=0
+    [CG] CG iter 9: obj=2286454.498867, maxRC=54046.836739, +23 cols
+    [CG]   [DIAG] iter=9 posCols=23 newCols=23 effImprove=23 updated=0
+    [CG] CG iter 10: obj=2319347.494457, maxRC=18177.248490, +23 cols
+    [CG]   [DIAG] iter=10 posCols=23 newCols=23 effImprove=23 updated=0
+    [CG] CG iter 11: obj=2342550.209403, maxRC=30305.045447, +18 cols
+    [CG]   [DIAG] iter=11 posCols=18 newCols=18 effImprove=18 updated=0
+    [CG] CG iter 12: obj=2346580.577500, maxRC=5936.094138, +9 cols
+    [CG]   [DIAG] iter=12 posCols=9 newCols=9 effImprove=9 updated=0
+    [CG] CG iter 13: obj=2348936.575846, maxRC=4639.900851, +9 cols
+    [CG]   [DIAG] iter=13 posCols=9 newCols=9 effImprove=9 updated=0
+    [CG] CG iter 14: obj=2351460.684787, maxRC=877.732812, +4 cols
+    [CG]   [DIAG] iter=14 posCols=4 newCols=4 effImprove=4 updated=0
+    [CG] CG iter 15: obj=2351683.300235, maxRC=140.169710, +2 cols
+    [CG]   [DIAG] iter=15 posCols=2 newCols=2 effImprove=2 updated=0
+    [CG] 列生成收敛，共 16 轮迭代
+    [CG] [CG-NODE] depth=0 exit=CERTIFIED certified=1 feasible=1 iters=16 generatedColsBeforeNode=0 newCols=297 posCandidates=297 duplicateCandidates=0 updatedCols=0 zeroObjImproveIters=1 objFirst=934685.754476 objLast=2351683.300235 objGain=1416997.545760 maxRC=1165902.942779 wallSec=0.186458 pricingSec=0.176160 cplexSolveSec=0.007294
+      [BB] 分支定界开始，根节点LP obj=2351683.300235，最大节点数=10000
+      [BB] 根节点启发式下界 LB=2105344.246121（上界=2351683.300235）
+    [CG] [BB-DIAG] 分支 x_{dc=0,retailer=0}, 节点数=1
+    [CG] 列生成开始，初始列数=580
+    [CG] CG iter 17: obj=2350339.904338, maxRC=37494.765841, +22 cols
+    [CG]   [DIAG] iter=17 posCols=22 newCols=22 effImprove=22 updated=0
+    [CG] CG iter 18: obj=2350339.904338, maxRC=31087.816436, +15 cols
+    [CG]   [DIAG] iter=18 posCols=15 newCols=15 effImprove=15 updated=0
+    [CG] CG iter 19: obj=2351082.665444, maxRC=8424.446365, +17 cols
+    [CG]   [DIAG] iter=19 posCols=17 newCols=16 effImprove=17 updated=1
+    [CG] CG iter 20: obj=2351167.729412, maxRC=5114.050830, +7 cols
+    [CG]   [DIAG] iter=20 posCols=7 newCols=7 effImprove=7 updated=0
+    [CG] CG iter 21: obj=2351167.729412, maxRC=627.106936, +1 cols
+    [CG]   [DIAG] iter=21 posCols=1 newCols=1 effImprove=1 updated=0
+    [CG] 列生成收敛，共 22 轮迭代
+    [CG] [CG-NODE] depth=1 exit=CERTIFIED certified=1 feasible=1 iters=6 generatedColsBeforeNode=297 newCols=61 posCandidates=62 duplicateCandidates=1 updatedCols=1 zeroObjImproveIters=3 objFirst=2350339.904338 objLast=2351167.729412 objGain=827.825074 maxRC=37494.765841 wallSec=0.013576 pricingSec=0.008478 cplexSolveSec=0.003469
+    [CG] 列生成开始，初始列数=564
+    [CG] CG iter 23: obj=2341461.823630, maxRC=41015.527887, +17 cols
+    [CG]   [DIAG] iter=23 posCols=17 newCols=17 effImprove=17 updated=0
+    [CG] CG iter 24: obj=2341934.627313, maxRC=12774.304467, +8 cols
+    [CG]   [DIAG] iter=24 posCols=8 newCols=8 effImprove=8 updated=0
+    [CG] CG iter 25: obj=2347712.473619, maxRC=8280.579008, +8 cols
+    [CG]   [DIAG] iter=25 posCols=8 newCols=7 effImprove=8 updated=1
+    [CG] CG iter 26: obj=2348802.816739, maxRC=443.558860, +2 cols
+    [CG]   [DIAG] iter=26 posCols=2 newCols=1 effImprove=2 updated=1
+    [CG] 列生成收敛，共 27 轮迭代
+    [CG] [CG-NODE] depth=1 exit=CERTIFIED certified=1 feasible=1 iters=5 generatedColsBeforeNode=358 newCols=33 posCandidates=35 duplicateCandidates=2 updatedCols=2 zeroObjImproveIters=1 objFirst=2341461.823630 objLast=2348802.816739 objGain=7340.993109 maxRC=41015.527887 wallSec=0.010128 pricingSec=0.005495 cplexSolveSec=0.003317
+    [CG] [BB-INCUMBENT] selection=2 node=1 previous=2105344.246121 value=2348802.816739 active=1
+    [CG] [BB-NODESEL] strategy=hybrid choice=dfs eligibleCount=1 active=1 gap=0.001007
+    [CG] [BB-INCUMBENT] selection=3 node=1 previous=2348802.816739 value=2351167.729412 active=0
+      [BB] 分支定界结束：处理 3 节点，剪枝 0，剩余活跃 0，整数解 3，状态=OPTIMAL，最好可行 obj=2351167.729412，gap=0.000000

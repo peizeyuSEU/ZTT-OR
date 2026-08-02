@@ -1,0 +1,50 @@
+    [CG] 列生成开始，初始列数=310
+    [CG] CG iter 1: obj=949588.640610, maxRC=755594.333344, +30 cols
+    [CG]   [DIAG] iter=1 posCols=30 newCols=30 effImprove=30 updated=0
+    [CG] CG iter 2: obj=1447397.894252, maxRC=220278.271012, +29 cols
+    [CG]   [DIAG] iter=2 posCols=29 newCols=29 effImprove=29 updated=0
+    [CG] CG iter 3: obj=1628102.668329, maxRC=124503.584478, +25 cols
+    [CG]   [DIAG] iter=3 posCols=25 newCols=25 effImprove=25 updated=0
+    [CG] CG iter 4: obj=1847183.254250, maxRC=152395.467939, +25 cols
+    [CG]   [DIAG] iter=4 posCols=25 newCols=25 effImprove=25 updated=0
+    [CG] CG iter 5: obj=1863563.141062, maxRC=65343.247254, +22 cols
+    [CG]   [DIAG] iter=5 posCols=22 newCols=22 effImprove=22 updated=0
+    [CG] CG iter 6: obj=1893093.422605, maxRC=53416.027736, +16 cols
+    [CG]   [DIAG] iter=6 posCols=16 newCols=15 effImprove=16 updated=1
+    [CG] CG iter 7: obj=1900229.423510, maxRC=15107.849436, +11 cols
+    [CG]   [DIAG] iter=7 posCols=11 newCols=9 effImprove=11 updated=2
+    [CG] CG iter 8: obj=1907329.310106, maxRC=7396.457707, +6 cols
+    [CG]   [DIAG] iter=8 posCols=6 newCols=6 effImprove=6 updated=0
+    [CG] CG iter 9: obj=1911603.948320, maxRC=2384.320193, +2 cols
+    [CG]   [DIAG] iter=9 posCols=2 newCols=2 effImprove=2 updated=0
+    [CG] CG iter 10: obj=1911603.948320, maxRC=595.047757, +2 cols
+    [CG]   [DIAG] iter=10 posCols=2 newCols=2 effImprove=2 updated=0
+    [CG] 列生成收敛，共 11 轮迭代
+    [CG] [CG-NODE] depth=0 exit=CERTIFIED certified=1 feasible=1 iters=11 generatedColsBeforeNode=0 newCols=165 posCandidates=168 duplicateCandidates=3 updatedCols=3 zeroObjImproveIters=2 objFirst=949588.640610 objLast=1911603.948320 objGain=962015.307710 maxRC=755594.333344 wallSec=0.081266 pricingSec=0.073644 cplexSolveSec=0.003960
+      [BB] 分支定界开始，根节点LP obj=1911603.948320，最大节点数=10000
+      [BB] 根节点启发式下界 LB=1874728.677679（上界=1911603.948320）
+    [CG] [BB-DIAG] 分支 x_{dc=4,retailer=1}, 节点数=1
+    [CG] 列生成开始，初始列数=467
+    [CG] CG iter 12: obj=1911260.724517, maxRC=38811.989540, +22 cols
+    [CG]   [DIAG] iter=12 posCols=22 newCols=22 effImprove=22 updated=0
+    [CG] CG iter 13: obj=1911260.724517, maxRC=14276.096495, +9 cols
+    [CG]   [DIAG] iter=13 posCols=9 newCols=9 effImprove=9 updated=0
+    [CG] CG iter 14: obj=1911260.724517, maxRC=4026.671207, +3 cols
+    [CG]   [DIAG] iter=14 posCols=3 newCols=3 effImprove=3 updated=0
+    [CG] 列生成收敛，共 15 轮迭代
+    [CG] [CG-NODE] depth=1 exit=CERTIFIED certified=1 feasible=1 iters=4 generatedColsBeforeNode=165 newCols=34 posCandidates=34 duplicateCandidates=0 updatedCols=0 zeroObjImproveIters=3 objFirst=1911260.724517 objLast=1911260.724517 objGain=0.000000 maxRC=38811.989540 wallSec=0.013155 pricingSec=0.009725 cplexSolveSec=0.002252
+    [CG] 列生成开始，初始列数=436
+    [CG] CG iter 16: obj=1909458.070241, maxRC=53799.988555, +23 cols
+    [CG]   [DIAG] iter=16 posCols=23 newCols=23 effImprove=23 updated=0
+    [CG] CG iter 17: obj=1909458.070241, maxRC=19915.782480, +12 cols
+    [CG]   [DIAG] iter=17 posCols=12 newCols=12 effImprove=12 updated=0
+    [CG] CG iter 18: obj=1909458.070241, maxRC=16023.615527, +4 cols
+    [CG]   [DIAG] iter=18 posCols=4 newCols=4 effImprove=4 updated=0
+    [CG] CG iter 19: obj=1909458.070241, maxRC=4026.671207, +4 cols
+    [CG]   [DIAG] iter=19 posCols=4 newCols=4 effImprove=4 updated=0
+    [CG] 列生成收敛，共 20 轮迭代
+    [CG] [CG-NODE] depth=1 exit=CERTIFIED certified=1 feasible=1 iters=5 generatedColsBeforeNode=199 newCols=43 posCandidates=43 duplicateCandidates=0 updatedCols=0 zeroObjImproveIters=4 objFirst=1909458.070241 objLast=1909458.070241 objGain=0.000000 maxRC=53799.988555 wallSec=0.024722 pricingSec=0.017716 cplexSolveSec=0.004296
+    [CG] [BB-INCUMBENT] selection=2 node=1 previous=1874728.677679 value=1909458.070241 active=1
+    [CG] [BB-NODESEL] strategy=hybrid choice=dfs eligibleCount=1 active=1 gap=0.000944
+    [CG] [BB-INCUMBENT] selection=3 node=1 previous=1909458.070241 value=1911260.724517 active=0
+      [BB] 分支定界结束：处理 3 节点，剪枝 0，剩余活跃 0，整数解 3，状态=OPTIMAL，最好可行 obj=1911260.724517，gap=0.000000
