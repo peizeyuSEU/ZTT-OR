@@ -1,0 +1,17 @@
+check,observed,expected,status,notes
+data_version,v0.2.0-candidate,v0.2.0-candidate,PASS,
+supplier_count,1,1,PASS,
+candidate_dc_count,8,8,PASS,
+market_count,15,15,PASS,
+supplier_dc_arc_count,8,8,PASS,
+dc_market_arc_count,120,120,PASS,
+intracity_arc_count,8,8,PASS,same-city arcs are dc_id=market_id and baseline distance 10 km
+dc_keys_unique,8,8,PASS,
+market_keys_unique,15,15,PASS,
+carbon_quota_status,not_yet_generated,not_yet_generated,PASS,
+dc_market_numeric_finite,True,True,PASS,
+supplier_dc_numeric_finite,True,True,PASS,
+market_numeric_finite,True,True,PASS,
+dc_numeric_finite,True,True,PASS,
+inventory_numeric_finite,True,True,PASS,
+emission_numeric_finite,True,True,PASS,
