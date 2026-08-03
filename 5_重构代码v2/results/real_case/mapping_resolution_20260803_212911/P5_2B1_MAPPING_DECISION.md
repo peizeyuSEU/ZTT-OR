@@ -1,0 +1,6 @@
+# P5-2B.1 mapping decision
+transport_emission_mapping: RESOLVED
+inventory_emission_mapping: RESOLVED
+facility_emission_mapping: RESOLVED
+transport_cost_mapping: INCOMPATIBLE_WITH_FROZEN_MODEL
+P5-2B_recommendation: REQUIRES_EXPLICIT_MODEL_EXTENSION_DECISION

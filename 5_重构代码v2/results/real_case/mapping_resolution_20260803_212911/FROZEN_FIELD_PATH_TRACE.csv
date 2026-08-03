@@ -1,0 +1,13 @@
+field,declared_in,assigned_in,overwritten_in,read_in,formula_role,expected_unit,scalar_or_vector_or_matrix,scenario_dependent,remarks
+dist,Instance.h,adapter,none,formula classes,physical distance,km,matrix,yes,audited from frozen source
+dcToSupplierDist,Instance.h,adapter,none,formula classes,supplier distance metadata,km,vector,no,audited from frozen source
+a_dist,Instance.h,adapter,none,formula classes,supplier-DC physical distance,km,vector,no,audited from frozen source
+b,Instance.h,adapter,none,formula classes,supplier-DC emission coefficient,tCO2e/tonne,vector,no,audited from frozen source
+bb,Instance.h,adapter,none,formula classes,DC-market emission coefficient,tCO2e/tonne,matrix,yes,audited from frozen source
+k,Instance.h,adapter,none,formula classes,emission factor,tCO2e/(tonne-km),scalar,yes indirectly,audited from frozen source
+hat_h,Instance.h,adapter,none,formula classes,inventory emission coefficient,tCO2e/(tonne-year),scalar,no,audited from frozen source
+fc,Instance.h,adapter,none,formula classes,facility emission coefficient,tCO2e/year,vector,no,audited from frozen source
+f,Instance.h,adapter,none,formula classes,DC fixed cost,CNY/year,vector,no,audited from frozen source
+h,Instance.h,adapter,none,formula classes,holding cost,CNY/(tonne-year),scalar,no,audited from frozen source
+mu,Instance.h,adapter,none,formula classes,annual demand,tonne/year,vector,no,audited from frozen source
+variance,Instance.h,adapter,none,formula classes,demand variance,source sigma2_daily,vector,no,audited from frozen source
