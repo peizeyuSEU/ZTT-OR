@@ -1,0 +1,45 @@
+metadata:
+  plan_id: PART5_REAL_CASE_20260803_203708
+  status: P5-1_P5-2_VALIDATION_ONLY
+  model_commit: 0dd725354732f9b8011e9e7e8540e0e64a3ff223
+  model_tag: paper-exp-baseline-20260801
+  data_repo: peizeyuSEU/Yangtze-River-Delta-Steel-Distribution-Network-Dataset
+  data_branch: codex/v02-intracity-carbon-finalization
+  data_commit: b9fc758dbe11762882bf66cbbc7672da0918adb7
+  data_version: v0.2.0-candidate
+problem:
+  num_suppliers: 1
+  num_candidate_dcs: 8
+  num_markets: 15
+  chromosome_length: 8
+algorithm:
+  method: Hybrid GA-BP
+  outer_solution_status: HEURISTIC_BEST_FOUND
+  inner_solver: Branch-and-Price
+future_experiments:
+  E0:
+    status: PLAN_ONLY
+    intracity_distance_km: 10
+    carbon_price: 0
+    temporary_carbon_quota: 0
+    w: 0
+    abatement: fixed
+  quota_multiplier_default: 1.0
+  quota_multipliers: [0.8, 0.9, 1.0, 1.1, 1.2]
+  formal_distance_levels_km: [0, 5, 10, 15, 20]
+  formal_carbon_price: 2
+  formal_quota: E0
+  formal_abatement: optimized
+  seeds: [101, 202, 303, 404, 505, 606, 707, 808, 909, 1010]
+  future_ga_bp_runs: 50
+scope:
+  this_turn_runs_solvers: false
+  this_turn_generates_quota: false
+  this_turn_runs_e0: false
+  this_turn_runs_formal_levels: false
+  p5_1: FINAL_COMPLETE_AND_FROZEN
+  p5_2: FINAL_COMPLETE_AND_FROZEN
+  p5_3: NOT_STARTED
+  p5_4: NOT_STARTED
+  p5_5: NOT_STARTED
+  p5_6: NOT_STARTED
