@@ -1,5 +1,5 @@
-# Part 4 / RQ3 screening report
+# Part4 / RQ3 screening report (corrected audit)
 
-Screening only: 42/42 completed, 0 failed, 0 interrupted, 0 duplicates, 0 missing. Three seeds (101, 505, 909), 10x30, GA-BP, outer interpretation HEURISTIC_BEST_FOUND; final inner BP status recorded separately. No formal Part4 runs were started.
+42/42 screening tasks completed; failed, timeout, interrupted, missing and duplicate counts are all zero. The cap profit-shift identity holds for all 15 audit rows, including three baseline self-comparisons; maximum absolute error is 0. For the 12 nonbaseline comparisons, decision-field results are reported separately by TRUE/FALSE/NA_NOT_AVAILABLE. Missing decision fields are not treated as matches.
 
-The baseline is shared once per seed. Base-instance fingerprints are checked separately from run-configuration fingerprints. Carbon-trading identities were validated for every normalized run. Trend changes are descriptive observations, not acceptance criteria. Formal levels remain pending user review.
+Carbon-price screening levels retained in full records are 0, 1, 2, 4, 6, 8, 10, 12, 16 and 20. Formal levels are frozen separately as 0, 1, 2, 4, 6, 10 and 20, pending execution approval. The allowance analysis is analytical derivation only and does not represent additional solver runs.

@@ -1,0 +1,80 @@
+metadata:
+  document_name: FORMAL_EXPERIMENT_MATRIX_PART4_RQ3
+  status: FINAL_FROZEN_PENDING_EXECUTION_APPROVAL
+  generated_at: '20260803_144509'
+  research_question: RQ3
+  experiment_part: Part4
+  algorithm: GA-BP
+  formal_algorithm_commit: 0dd725354732f9b8011e9e7e8540e0e64a3ff223
+  formal_algorithm_tag: paper-exp-baseline-20260801
+  formal_experiment_start_allowed: false
+problem:
+  size_id: 10x30
+  num_dc: 10
+  num_retailers: 30
+model_parameters:
+  delta: 3000.0
+  investment_exponent: 0.5
+  carbon_cap: 100000.0
+  carbon_price_levels:
+  - 0
+  - 1
+  - 2
+  - 4
+  - 6
+  - 10
+  - 20
+  allowance_levels:
+  - 0
+  - 40000
+  - 100000
+  - 200000
+  - 350000
+ga_parameters:
+  population_size: 30
+  max_generation: 50
+  crossover_rate: 0.7
+  mutation_rate: -1
+  elitism: true
+  early_stop: true
+  convergence_generations: 10
+  convergence_tolerance: 0.001
+  parallel_fitness: true
+  num_threads: 8
+  chromosome_length: 10
+bp_parameters:
+  pricing_algorithm: 0
+  pricing_max_cols_per_dc: 3
+  dual_smooth_alpha: 0.0
+  rc_eps: 1.0e-06
+  max_cg_iterations: 2000
+  max_branch_nodes: 10000
+  bp_time_limit_sec: 600.0
+  bp_relative_gap: 0.0
+  parallel_pricing: false
+  cplex_threads: 1
+seeds:
+- 101
+- 202
+- 303
+- 404
+- 505
+- 606
+- 707
+- 808
+- 909
+- 1010
+task_key: (random_seed, carbon_price)
+solver_runs:
+  carbon_price_formal_runs: 70
+  allowance_additional_solver_runs: 0
+  total_new_ga_bp_runs: 70
+analytical_observations:
+  allowance_levels: 5
+  formal_seeds: 10
+  derived_allowance_observations: 50
+execution_policy:
+  serial_scenario_runs: 1
+  resource_lock_required: true
+  do_not_start_without_user_approval: true
+  formal_allowance_results_are_analytical: true

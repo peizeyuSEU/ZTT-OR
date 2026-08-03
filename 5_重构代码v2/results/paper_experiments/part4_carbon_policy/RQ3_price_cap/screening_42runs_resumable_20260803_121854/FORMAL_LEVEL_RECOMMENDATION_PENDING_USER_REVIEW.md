@@ -1,5 +1,5 @@
-# Formal level recommendation pending user review
+# Formal Part4 price levels pending execution approval
 
-Preliminary screening recommendation: carbon prices **0, 1, 2, 4, 8, 12, 20**; retain all five allowance levels **0, 40000, 100000, 200000, 350000**. These are screening-based representative levels spanning the observed range and transition region; this is not a final paper conclusion and does not start the formal stage.
+Frozen formal carbon-price levels: 0, 1, 2, 4, 6, 10, 20. Screening levels 8, 12 and 16 remain preserved in the screening records but are excluded to keep seven formal levels spanning the boundary, baseline, transition and high-price regions.
 
-Excluded price levels for the 7-level candidate set: 6, 10, 16. They remain in screening records and are omitted only to limit the formal grid.
+Allowance levels remain 0, 40000, 100000, 200000 and 350000 as analytically derived observations; no additional GA-BP runs are planned for them.
