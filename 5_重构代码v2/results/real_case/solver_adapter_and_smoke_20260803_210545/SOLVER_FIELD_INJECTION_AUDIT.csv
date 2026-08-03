@@ -1,0 +1,15 @@
+model_field,model_class,model_member,source_file,source_column,mapping_type,input_unit,model_unit,conversion,resolved_value_count,validation_status,notes
+Instance.numDC,Instance,numDC,dc_params.csv,dc_id,DIRECT,count,count,none,8,PASS,explicit sorted DC IDs
+Instance.numRetailer,Instance,numRetailer,market_params.csv,market_id,DIRECT,count,count,none,15,PASS,explicit sorted market IDs
+Instance.mu,Instance,mu,market_params.csv,mu_annual_tonnes,DIRECT,tonnes/year,tonnes/year,none,15,PASS,rounded to model integer type
+Instance.variance,Instance,variance,market_params.csv,sigma2_daily,DIRECT,tonnes^2/day^2,model variance units,none,15,PASS,frozen formulas consume sigma2 values directly
+Instance.f,Instance,f,dc_params.csv,f_j_cny_per_year,DIRECT,CNY/year,CNY/year,none,8,PASS,
+Instance.F/g/L/h,Instance,"F,g,L,h",inventory_params.csv,F_j_cny_per_order;g_j_cny_per_order;L_j_days;h_cny_per_tonne_year,DIRECT,mixed named units,frozen Instance units,none,8,PASS,all eight source h values are 300 and map to frozen scalar h=300
+Instance.dist,Instance,dist,dc_market.csv,road_distance_km,DERIVED_WITH_DOCUMENTED_FORMULA,km,km,intracity same-ID arcs overridden by scenario,120,PASS,
+Instance.bb,Instance,bb,case_config.json;dc_market.csv,transport_emission_factor;road_distance_km,DERIVED_WITH_DOCUMENTED_FORMULA,"tCO2e/(tonne-km), km",tCO2e/tonne,factor*distance,120,PASS,
+Instance.fc,Instance,fc,dc_emission_params.csv,hat_f_j_tco2e_per_year,DIRECT,tCO2e/year,tCO2e/year,none,8,PASS,
+Instance.reservePrice,Instance,reservePrice,market_params.csv,v_i_baseline,DIRECT,CNY/tonne,CNY/tonne,none,15,PASS,
+Instance.p/C,Instance,"p,C",CLI,carbon-price;carbon-quota,TEMPORARY_SMOKE_PARAMETER,CNY/tCO2e;tCO2e,model units,CLI override,2,PASS,"smoke only, no E0"
+Instance.delta,Instance,delta/beta,CLI/model,delta,TEMPORARY_SMOKE_PARAMETER,CNY,model units,3000,8,PASS,frozen smoke setting
+Config.investment_exponent,Config,investment_exponent,frozen Config,investment_exponent,FROZEN_MODEL_DEFAULT,dimensionless,dimensionless,0.5,1,PASS,
+capacity,frozen model,none,frozen model,none,NOT_REQUIRED_BY_FROZEN_MODEL,N/A,N/A,none,0,PASS,

@@ -19,6 +19,8 @@
 | transport emissions | case_config.transport_emission_factor_tco2e_per_tonne_km | DIRECT | tCO2e/(tonne-km) |
 | facility emissions | dc_emission_params.hat_f_j_tco2e_per_year | DIRECT | tCO2e/year |
 | inventory emissions | dc_emission_params.hat_h_tco2e_per_tonne_year | DIRECT | tCO2e/(tonne-year) |
-| capacity | -- | NOT_AVAILABLE | no capacity field in candidate data; must be resolved before P5-3 |
+| DC throughput capacity | -- | NOT_REQUIRED_BY_FROZEN_MODEL | no capacity row/member exists in frozen model |
+| supplier capacity | -- | MODEL_ASSUMPTION_SUFFICIENT | no supplier capacity constraint exists |
+| warehouse area | dc_params.warehouse_area_sqm | USED_FOR_FIXED_COST_CALIBRATION_ONLY | not throughput capacity |
 | carbon quota | case_config.carbon_quota | PLAN_ONLY | not_yet_generated; no quota generated here |
 | delta/gamma/w | frozen model Config | PLAN_ONLY | model parameters, not data fields; no solve here |
