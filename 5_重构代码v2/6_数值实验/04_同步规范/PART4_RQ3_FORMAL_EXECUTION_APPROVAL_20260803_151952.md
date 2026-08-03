@@ -1,0 +1,11 @@
+approval_status: APPROVED_FOR_EXECUTION
+approved_matrix: FORMAL_EXPERIMENT_MATRIX_PART4_RQ3_20260803_144509.yaml
+approved_matrix_commit: 5a480a68e8deca14a6ddc9ca8cb766bc1f93c931
+approved_price_levels: 0,1,2,4,6,10,20
+approved_seeds: 101,202,303,404,505,606,707,808,909,1010
+approved_solver_runs: 70
+allowance_additional_solver_runs: 0
+allowance_derived_observations: 50
+screening_results_reused_as_formal_runs: false
+formal_execution_approved_by_user: true
+Part5_start_allowed: false
