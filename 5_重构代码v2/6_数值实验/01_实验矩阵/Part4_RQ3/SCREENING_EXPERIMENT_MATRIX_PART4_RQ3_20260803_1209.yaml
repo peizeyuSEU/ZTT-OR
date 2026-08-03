@@ -1,0 +1,212 @@
+metadata:
+  document_name: SCREENING_EXPERIMENT_MATRIX_PART4_RQ3
+  status: FINAL_FROZEN_FOR_SCREENING
+  generated_at: 2026-08-03 12:09 +08:00
+  research_question: RQ3
+  experiment_part: Part4
+  purpose: Examine the effects of carbon-permit price and initial carbon allowance.
+  formal_algorithm_commit: 0dd725354732f9b8011e9e7e8540e0e64a3ff223
+  formal_algorithm_tag: paper-exp-baseline-20260801
+  note: Execute the 42-run screening only. Do not start the formal Part4 matrix.
+
+design_decision:
+  representative_size:
+    size_id: 10x30
+    num_dc: 10
+    num_retailers: 30
+  paired_by_seed: true
+  method: one_factor_at_a_time
+  justification:
+  - 10x30 is the frozen representative size used in the completed experiments.
+  - It is large enough to reveal network and investment responses while remaining practical.
+  - Screening is required before freezing the formal carbon-price levels.
+
+screening_random_seeds:
+- 101
+- 505
+- 909
+
+shared_baseline:
+  scenario_id: PRICE_0200_CAP_100000
+  carbon_price: 2.0
+  carbon_cap: 100000.0
+  delta: 3000.0
+  investment_exponent: 0.5
+
+carbon_price_screening:
+  fixed_carbon_cap: 100000.0
+  levels:
+  - 0.0
+  - 1.0
+  - 2.0
+  - 4.0
+  - 6.0
+  - 8.0
+  - 10.0
+  - 12.0
+  - 16.0
+  - 20.0
+
+carbon_cap_screening:
+  fixed_carbon_price: 2.0
+  levels:
+  - 0.0
+  - 40000.0
+  - 100000.0
+  - 200000.0
+  - 350000.0
+
+run_counts:
+  price_levels: 10
+  cap_levels: 5
+  shared_baseline_levels: 1
+  unique_scenarios_per_seed: 14
+  screening_seeds: 3
+  unique_screening_runs: 42
+  formula: 3*(10+5-1)=42
+
+precheck:
+  random_seed: 101
+  scenarios:
+  - PRICE_0200_CAP_100000
+  - PRICE_2000_CAP_100000
+  - PRICE_0200_CAP_350000
+  reuse_in_screening_queue: true
+  paper_statistics: false
+
+frozen_common_parameters:
+  delta: 3000.0
+  investment_exponent: 0.5
+  min_w: 0.0
+  max_w: 1.0
+  use_sqrt_investment: true
+  use_invest_in_column: true
+  pricing_algorithm: 0
+  pricing_max_cols_per_dc: 3
+  dual_smooth_alpha: 0.0
+  rc_eps: 1.0e-06
+  max_cg_iterations: 2000
+  max_branch_nodes: 10000
+  bp_time_limit_sec: 600.0
+  bp_relative_gap: 0.0
+  parallel_pricing: false
+  cplex_threads: 1
+
+ga_parameters:
+  population_size: 30
+  max_generation: 50
+  crossover_rate: 0.7
+  mutation_rate: -1
+  elitism: true
+  early_stop: true
+  convergence_generations: 10
+  convergence_tolerance: 0.001
+  parallel_fitness: true
+  num_threads: 8
+  chromosome_length: 10
+
+execution_order:
+  order: paired_by_seed
+  parallel_scenario_runs: 1
+  resource_lock_required: true
+  resumable_queue_required: true
+  preserve_abnormal_attempts: true
+  stop_after_screening: true
+
+solution_interpretation:
+  external_algorithm_name: GA-BP
+  outer_solution_status: HEURISTIC_BEST_FOUND
+  final_inner_bp_status_reported_separately: true
+  global_optimality_claim: false
+
+required_raw_metrics:
+- random_seed
+- scenario_id
+- carbon_price
+- carbon_cap
+- outer_solution_status
+- final_inner_bp_status
+- integer_solution
+- total_profit
+- total_emissions
+- investment_cost
+- e_plus
+- e_minus
+- net_carbon_trading_cost
+- open_dc_count
+- open_dc_set
+- retailer_service_set
+- w_vector
+- mean_positive_w
+- mean_open_dc_w
+- max_w
+- wall_time_sec
+- actual_bp_calls
+- cache_hit_rate
+- termination_reason
+- base_instance_fingerprint
+- run_config_fingerprint
+
+screening_derived_metrics:
+- profit_change
+- emissions_change
+- investment_change
+- carbon_trading_change
+- open_dc_count_change
+- network_structure_changed
+- retailer_service_set_changed
+- mean_open_dc_w_change
+- cap_profit_identity_difference
+- cap_decision_invariance_status
+
+required_audits:
+  config_audit:
+  - Confirm carbon_price and carbon_cap are effective in resolved configuration.
+  - Confirm delta=3000 and investment_exponent=0.5.
+  - Confirm best_w contains exactly 10 candidate-DC values.
+  - Confirm unknown YAML fields are not silently ignored.
+  carbon_trading_identity:
+  - e_plus=max(E-C,0)
+  - e_minus=max(C-E,0)
+  - net_carbon_trading_cost=carbon_price*(E-C)
+  cap_identity:
+  - profit(C2)-profit(C1)=carbon_price*(C2-C1)
+  fingerprint_audit:
+  - Use base_instance_fingerprint to compare the same seed across policy scenarios.
+  - Exclude carbon_price, carbon_cap, scenario_id, output path, and timestamps from base_instance_fingerprint.
+  result_boundary:
+  - Do not use monotonic trends as an acceptance condition.
+  - Do not delete or replace seeds because results are not smooth.
+
+screening_outputs:
+- RQ3_SCREENING_RUN_QUEUE.csv
+- RQ3_SCREENING_UNIQUE_RUN_RESULTS.csv
+- RQ3_PRICE_LEVEL_RESULTS.csv
+- RQ3_CAP_LEVEL_RESULTS.csv
+- RQ3_PRICE_SUMMARY_BY_LEVEL.csv
+- RQ3_CAP_SUMMARY_BY_LEVEL.csv
+- RQ3_PRICE_TREND_DIAGNOSTICS.csv
+- RQ3_CAP_IDENTITY_AUDIT.csv
+- RQ3_BASELINE_VS_RQ2_CONSISTENCY.csv
+- RQ3_SCREENING_REPORT.md
+- FORMAL_LEVEL_RECOMMENDATION_PENDING_USER_REVIEW.md
+- BATCH_MANIFEST.txt
+- SCREENING_FINALIZATION_MANIFEST.txt
+
+formal_stage:
+  status: PENDING_USER_REVIEW
+  target_price_levels: 7
+  target_cap_levels: 5
+  formal_random_seeds:
+  - 101
+  - 202
+  - 303
+  - 404
+  - 505
+  - 606
+  - 707
+  - 808
+  - 909
+  - 1010
+  projected_unique_runs: 110
+  automatic_start_forbidden: true
