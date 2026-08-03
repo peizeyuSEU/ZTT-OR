@@ -500,11 +500,11 @@ private:
         base.baseAi.reserve(inst->numRetailer);
 
         // trans_cost_sup_dc 不依赖 i，提到循环外
-        double trans_cost_sup_dc = TransportCostFormula::costSupplierToDC(inst->a_dist[j])
+        double trans_cost_sup_dc = TransportCostFormula::getSupplierDCTransportCostPerTonne(*inst, j)
             + inst->p * (1.0 - w_j) * inst->b[j];
 
         for (int i = 0; i < inst->numRetailer; i++) {
-            double trans_cost_dc_retail = TransportCostFormula::costDCToRetailer(inst->dist[i][j])
+            double trans_cost_dc_retail = TransportCostFormula::getDCMarketTransportCostPerTonne(*inst, i, j)
                 + inst->p * (1.0 - w_j) * inst->bb[i][j];
             base.baseAi.push_back(
                 (trans_cost_dc_retail + trans_cost_sup_dc) * inst->mu[i] + dual[i]);
@@ -703,7 +703,7 @@ private:
         double forcedVar = 0.0;
         double forcedDual = 0.0;
 
-        double trans_cost_sup_dc = TransportCostFormula::costSupplierToDC(inst->a_dist[j]);
+        double trans_cost_sup_dc = TransportCostFormula::getSupplierDCTransportCostPerTonne(*inst, j);
         double carbon_factor = inst->p * (1.0 - w_j);
         double carbon_sup_dc = inst->b[j];  // b̂_j
 
@@ -712,7 +712,7 @@ private:
                 double mu_i = inst->mu[i];
                 double rev = ((p_j <= inst->reservePrice[i]) ? p_j : 0.0) * mu_i;
                 double trans_lin = (trans_cost_sup_dc
-                                    + TransportCostFormula::costDCToRetailer(inst->dist[i][j]))
+                                    + TransportCostFormula::getDCMarketTransportCostPerTonne(*inst, i, j))
                                    * mu_i;
                 double trans_carbon =
                     carbon_factor * (carbon_sup_dc + inst->bb[i][j]) * mu_i;
@@ -729,7 +729,7 @@ private:
                 double mu_i = inst->mu[i];
                 double rev = ((p_j <= inst->reservePrice[i]) ? p_j : 0.0) * mu_i;
                 double trans_lin = (trans_cost_sup_dc
-                                    + TransportCostFormula::costDCToRetailer(inst->dist[i][j]))
+                                    + TransportCostFormula::getDCMarketTransportCostPerTonne(*inst, i, j))
                                    * mu_i;
                 double trans_carbon = carbon_factor * (carbon_sup_dc + inst->bb[i][j]) * mu_i;
 

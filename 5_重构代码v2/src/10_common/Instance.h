@@ -11,6 +11,8 @@
  * 优化：clone() 只做浅拷贝（共享指针），避免深拷贝大型矩阵。
  * 所有成员变量通过 shared_ptr 包裹，clone 时复制指针（O(1)）。
  */
+enum class TransportCostMode { FROZEN_PIECEWISE, EXPLICIT_ARC_COST };
+
 class Instance {
 public:
     int numDC = 0;
@@ -46,6 +48,11 @@ public:
 
     std::vector<double> reservePrice;
     std::vector<double> a_dist;
+
+    // Part 5 explicit arc cost parameterization; legacy default remains piecewise.
+    TransportCostMode transportCostMode = TransportCostMode::FROZEN_PIECEWISE;
+    std::vector<double> supplierDcTransportCostPerTonne;
+    std::vector<std::vector<double>> dcMarketTransportCostPerTonne;
 
     double delta = 5000.0;
     std::vector<double> beta;

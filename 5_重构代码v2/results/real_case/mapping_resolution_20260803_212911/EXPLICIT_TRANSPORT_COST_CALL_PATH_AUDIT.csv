@@ -1,0 +1,5 @@
+file,class_or_function,old_cost_source,new_cost_source,legacy_mode_behavior,explicit_mode_behavior,unit,test_status
+src/7_formula/03_TransportCost.h,transportCost,distance band,getSupplierDCTransportCostPerTonne/getDCMarketTransportCostPerTonne,unchanged piecewise/direct,explicit coefficient direct return,CNY/tonne,PASS
+src/8_solver/01_PricingSolver.h,computeFeatureBase/solve,distance band,unified Instance accessors,unchanged,explicit coefficient direct return,CNY/tonne,PASS
+src/7_formula/08_Objective.h,column evaluation,TransportCostFormula,TransportCostFormula unified interface,unchanged,explicit coefficient,CNY/tonne,PASS
+src/9_postprocessor/01_PostProcessor.h,cost decomposition,TransportCostFormula,TransportCostFormula unified interface,unchanged,explicit coefficient,CNY/tonne,PASS

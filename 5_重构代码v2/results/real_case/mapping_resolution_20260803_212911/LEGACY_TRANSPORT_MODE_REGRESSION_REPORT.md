@@ -1,0 +1,1 @@
+All three seeds (101, 505, 909) passed FROZEN_PIECEWISE regression. Maximum objective absolute difference is 0; emissions, open-DC count, served-retailer count, best_w, BP status and integer feasibility are identical. The new explicit mode is not selected in this regression.

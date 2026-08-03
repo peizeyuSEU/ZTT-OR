@@ -1,0 +1,1 @@
+Explicit mode uses the same unified Instance accessors in transport cost, pricing feature construction, column profit, master evaluation and post-processing. All deterministic checks use cost=0.39*distance*quantity; maximum absolute and relative errors are zero.
