@@ -1,0 +1,1 @@
+70/70 formal tasks completed; failures=0; final inner BP statuses=['OPTIMAL']; integer solutions=70/70; analytical allowance observations=50; additional allowance solver runs=0.\n
