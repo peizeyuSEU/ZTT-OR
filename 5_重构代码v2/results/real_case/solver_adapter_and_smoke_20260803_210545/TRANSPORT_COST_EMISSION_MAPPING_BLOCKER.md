@@ -1,0 +1,3 @@
+# Transport cost/emission mapping blocker
+
+Source fields: case_config.transport_rate_cny_per_tonne_km=0.39 and transport_emission_factor_tco2e_per_tonne_km=6.996e-05; dc_emission_params.hat_h_tco2e_per_tonne_year=0.00055. Frozen model: TransportCostFormula has only a piecewise distance tariff/direct-distance switch; Instance has scalar k=0.01 and hat_h=2.0, and no per-arc cost/emission matrices. The adapter can correctly override distances, but cannot claim these source coefficients are used by the frozen objective. Resolving this requires an explicit model extension or a documented decision to use frozen defaults; it must not be guessed here.

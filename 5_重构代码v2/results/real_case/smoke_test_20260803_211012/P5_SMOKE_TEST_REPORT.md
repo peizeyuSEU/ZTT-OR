@@ -8,3 +8,6 @@ This is a wiring smoke test only, not a formal real-case experiment and not part
 | 10 km | PASS | true | OPTIMAL | 0.314065 | 36 | 4 | 8 |
 
 The base-data fingerprint is identical across the two runs; resolved instance fingerprints differ because the eight same-city arcs and their derived coefficients differ. Both runs completed with outer status HEURISTIC_BEST_FOUND.
+
+
+**Acceptance note:** these runs exercised the frozen solver with frozen scalar/default cost and emission coefficients, not the unresolved source transport-rate coefficients. They are retained as wiring observations only and are not accepted as valid real-case smoke tests.
