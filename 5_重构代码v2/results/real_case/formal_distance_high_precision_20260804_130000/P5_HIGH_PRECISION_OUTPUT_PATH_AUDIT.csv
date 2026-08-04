@@ -1,0 +1,14 @@
+file_or_output,writer_function,old_precision_behavior,new_precision_behavior,double_fields_covered,validation_status
+result.csv,writeRun,default_stream_precision,max_digits10,all floating result decomposition fields,PASS
+normalized_result.csv,writeRun,default_stream_precision,max_digits10,total_profit,PASS
+objective_decomposition.csv,writeRun,default_stream_precision,max_digits10,all objective components,PASS
+emission_decomposition.csv,writeRun,default_stream_precision,max_digits10,all emission components,PASS
+index_id_mapping.csv,writeRun,default_stream_precision,max_digits10,no material floating fields,PASS
+market_assignment.csv,writeRun,default_stream_precision,max_digits10,no material floating fields,PASS
+report.txt,writeRun,default_stream_precision,max_digits10,reported scalar fields,PASS
+convergence.csv,writeRun,default SolutionHelper precision,max_digits10,fitness and elapsed-time fields,PASS
+config_used.yaml,controller,explicit decimal serialization,explicit full values,all formal parameters,PASS
+resolved_config.yaml,controller,explicit decimal serialization,explicit full values,all formal parameters,PASS
+resolved_real_case_instance.json,controller,JSON default serialization,full fingerprint metadata,instance parameters,PASS
+solver_arc_parameters.csv,dry-run writer,default stream precision,max_digits10,arc coefficients,PASS
+RUN_MANIFEST.txt,controller,default text serialization,full provenance,wall time and hashes,PASS
