@@ -1,0 +1,16 @@
+parameter,value,unit,source
+candidate_DCs,8,DCs,dataset case
+markets,15,markets,dataset case
+supplier,1,supplier,dataset case
+annual_demand,1000000,tonnes/year,dataset case
+baseline_intracity_distance,10,km,P5-5 protocol
+sensitivity_distances,0/5/10/15/20,km,P5-5 protocol
+transport_rate,0.39,CNY/(tonne*km),dataset case
+transport_emission_factor,6.996e-05,tCO2e/(tonne*km),dataset case
+inventory_emission_factor,0.00055,tCO2e/(tonne*year),dataset case
+facility_emission,110,tCO2e/year/open DC,dataset case
+carbon_price,2,CNY/tCO2e,formal configuration
+carbon_quota,14442.842886043889,tCO2e/year,model-derived E0 artifact
+quota_rule,C=10km E0,,model-derived E0 artifact
+GA_seeds,10,seeds,P5-5.1
+formal_runs,50,runs,P5-5.1
