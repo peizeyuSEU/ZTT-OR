@@ -12,3 +12,8 @@ E0_recomputed=false
 formal_distance_runs_repeated=false
 data_original_inputs_modified=false
 model_core_modified=false
+
+P5-6_FINAL_MATERIALS_CORRECTION=FINAL_COMPLETE_AND_FROZEN
+optimization_runs_performed_in_P5_6_1=0
+E0_recomputed_in_P5_6_1=false
+formal_distance_runs_repeated_in_P5_6_1=false

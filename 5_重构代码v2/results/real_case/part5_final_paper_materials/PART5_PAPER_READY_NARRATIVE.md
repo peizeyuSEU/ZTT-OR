@@ -13,3 +13,19 @@ The six-open-DC network is stable at all distances. Market assignment is stable 
 
 ## Limitations
 GA seeds represent algorithmic randomness for one fixed case, not independent real-world systems. The outer GA result is not claimed globally optimal. The 0 km level is a lower-bound sensitivity scenario rather than a literal zero-distance shipment claim.
+
+## Supplementary model-structure clarification
+
+Part 5 adds an explicit linear intracity transport-cost parameterization for the real-case adapter. This is an input-side parameterization extension only: it does not change the mathematical decision variables, constraints, network structure, GA logic, BP logic, or carbon-emission formulas. The original stochastic experiments continue to use the frozen tiered transport-cost interface, while the real case uses the linear rate 0.39 CNY/(tonne·km).
+
+## Market service structure
+
+The optimized service structure serves an average of 13 markets at 0 km and 5 km, and 12 markets at 10 km, 15 km, and 20 km. The change between 5 km and 10 km is an optimization outcome of this case study; it should not be interpreted as a causal real-world market response. Accordingly, transport cost and total emissions need not be strictly monotone in distance.
+
+## 10 km quota interpretation
+
+At 10 km, mean total emissions are 14407.406144923654 tCO2e/year against the fixed quota 14442.842886043889 tCO2e/year. The mean net carbon trading cost is -70.87348224047128 CNY/year. Under the model sign convention, this negative value indicates average allowance-sale revenue from surplus allowances; it is not a government subsidy or an externally observed carbon-market revenue.
+
+## Interpretation of w at closed DCs
+
+The complete eight-component `best_w` vector is retained for reproducibility. A `w_j` value at a closed DC does not represent an actual operating or abatement investment decision. Interpretive summaries should focus on `mean_w_open_dcs` and `demand_weighted_mean_w`, together with the open-DC set.
