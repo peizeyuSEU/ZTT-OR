@@ -1,0 +1,49 @@
+
+      ========== [环节4/5] 列生成 CG（RMP + 定价子问题迭代求 LP 松弛） ==========
+        设计: CPLEX 增量式 RMP(动态加列，不重建模型) ↔ 逐 DC 定价生成负 RC 新列
+        定价并行: 是(持久线程池复用) | DC 数=8 | 定价线程=8(上限pricing_threads=8)[生效]
+        核预算: core_budget=8 | GA并发进程数=1(GA串行) | 峰值占核=GA进程×定价线程
+        RMP求解: CPLEX线程=1(cplex_threads=1)[单线程]
+        收敛: 最大迭代=1000 | tailing-off 早停=否(连续20轮改善<1e-06) | RC 阈值=1e-06
+        优化: 每DC持久 PricingSolver(缓存跨迭代保留) + 持久线程池(不再每轮建销)
+
+      ========== [环节5/5] 定价子问题 PS（每DC生成最大负 RC 列，本次瓶颈~83%） ==========
+        算法: 论文Algorithm3（正式校验模式）
+        无损缓存: cachedBestCols仅提供 incumbent/上界剪枝，不跳过完整定价
+        完整定价: 候选价格(保留价去重)×两点组合 O(候选价×n_neg²×numRetailer)
+
+    ========== [环节3/5] 分支定界 BB（DFS 深度优先，恢复整数解） ==========
+      设计: 根节点列生成求 LP → 按 x_ij(DC-零售商对)分数值分支 → 左 x_ij=0 / 右 x_ij=1
+      策略: 深度优先(DFS 栈) | 选最大分数化变量分支 | LP≤下界则剪枝
+      认证: 所有节点严格列生成 | 目标gap=0 | 最大节点数=10000 | 时间上限=600s
+      资源限制仅改变求解状态，不允许LP值冒充整数可行解
+
+  ========== [环节2/5] 分支定价 BP（固定 w_j 下精确求解整数规划） ==========
+    设计: 列生成(求 LP 松弛) + 分支定界(恢复整数) = 分支定价
+    收尾: 内层列利润已包含减排投资成本；BP整数结果完成后仅加回碳配额常数收益
+    优化: fitnessCache 仅复用相同 w 的认证最优结果；未认证结果再次出现时重算
+    投资成本模型: ½δw²D^γ, γ=0.500000
+    投资成本处理: 列内扣除(新)
+  [BP] E0 fixed-w BP开始，w=[0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000]
+    [CG] 列生成开始，初始列数=128
+    [CG] CG iter 1: obj=144208285.848945, maxRC=59534860.274892, +8 cols
+    [CG]   [DIAG] iter=1 posCols=8 newCols=8 effImprove=8 updated=0
+    [CG] CG iter 2: obj=161074907.092443, maxRC=10624109.721491, +6 cols
+    [CG]   [DIAG] iter=2 posCols=6 newCols=6 effImprove=6 updated=0
+    [CG] CG iter 3: obj=165146538.018104, maxRC=6899501.394005, +6 cols
+    [CG]   [DIAG] iter=3 posCols=6 newCols=6 effImprove=6 updated=0
+    [CG] CG iter 4: obj=168224854.392484, maxRC=6706410.147508, +6 cols
+    [CG]   [DIAG] iter=4 posCols=6 newCols=6 effImprove=6 updated=0
+    [CG] CG iter 5: obj=170866649.876085, maxRC=3691290.075995, +4 cols
+    [CG]   [DIAG] iter=5 posCols=4 newCols=4 effImprove=4 updated=0
+    [CG] CG iter 6: obj=174557939.952081, maxRC=3722055.444059, +3 cols
+    [CG]   [DIAG] iter=6 posCols=3 newCols=3 effImprove=3 updated=0
+    [CG] CG iter 7: obj=174557939.952081, maxRC=701011.406515, +3 cols
+    [CG]   [DIAG] iter=7 posCols=3 newCols=3 effImprove=3 updated=0
+    [CG] CG iter 8: obj=174557939.952081, maxRC=29379.733500, +1 cols
+    [CG]   [DIAG] iter=8 posCols=1 newCols=1 effImprove=1 updated=0
+    [CG] 列生成收敛，共 9 轮迭代
+    [CG] [CG-NODE] depth=0 exit=CERTIFIED certified=1 feasible=1 iters=9 generatedColsBeforeNode=0 newCols=37 posCandidates=37 duplicateCandidates=0 updatedCols=0 zeroObjImproveIters=2 objFirst=144208285.848945 objLast=174587319.685581 objGain=30379033.836636 maxRC=59534860.274892 wallSec=0.031303 pricingSec=0.006183 cplexSolveSec=0.004873
+      [BB] 根节点即为整数解，obj=174587319.685581
+  [BP] E0 fixed-w BP适应度 = 174587319.685581（1已处理节点，9 CG迭代）
+E0_PASS E0=14442.842886043889 profit=174587319.68558115 time=0.031793008999999997
