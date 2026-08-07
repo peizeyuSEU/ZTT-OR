@@ -1,0 +1,41 @@
+experiment_name: final_baseline_smoke_10x30_seed101
+experiment_type: pre-formal full-configuration smoke test
+formal_replication: false
+code_commit: 0dd725354732f9b8011e9e7e8540e0e64a3ff223
+git_tag: paper-exp-baseline-20260801
+git_branch: master
+start_time: 2026-08-01T15:10:29+08:00
+end_time: 2026-08-01T15:10:46+08:00
+command: /usr/bin/time -v ./bin/ga_bp /home/peizeyu2026/smart_wolf_project/ZTT-OR/20260715 ZTT-OR/5_重构代码v2/results/paper_experiments/final_baseline_smoke_10x30_seed101_20260801_150916/config_used.yaml
+server_cpu: Intel Core i9-10980XE; 18 physical cores; 36 logical CPUs
+server_memory: 251GiB total; approximately 234GiB available at audit
+size: 10x30
+random_seed: 101
+seed_note: one global random_seed controls both instance generation and GA RNG
+delta: 3000.0
+investment_exponent: 0.5
+population_size: 30
+max_generation: 50
+early_stop: true
+convergence_generations: 10
+convergence_tolerance: 0.001
+pricing_algorithm: 0
+pricing_max_cols_per_dc: 3
+dual_smooth_alpha: 0
+max_cg_iterations: 2000
+max_branch_nodes: 10000
+bp_time_limit_sec: 600
+bp_relative_gap: 0
+parallel_fitness: true
+num_threads: 8
+parallel_pricing: false
+cplex_threads: 1
+use_sqrt_investment: true
+use_invest_in_column: true
+transport_direct_distance: false
+cg_early_stop: false
+legacy_mode: false
+external_wall_time_sec: 16.86
+final_status: HEURISTIC_BEST_FOUND; inner BP OPTIMAL; integer solution true; gap 0
+exception_summary: no prohibited solver or concurrency error observed
+archived_files: config_used.yaml resolved_config.yaml run.log program_run.log report.txt result.csv convergence.csv time_verbose.txt MANIFEST.txt

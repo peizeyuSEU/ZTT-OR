@@ -1,0 +1,5 @@
+candidate_id,parallel_fitness,num_threads,wall_time_sec,user_time_sec,system_time_sec,cpu_percent,max_rss_kb,best_objective,generations,fitness_requests,actual_bp_calls,cache_hits,cache_hit_rate,completed,result_consistent,error_status,notes
+candidate_t1,false,1,47.50,47.10,0.35,99,16696,2368864.71113423,5,150,127,23,0.1533333333,true,true,NONE,serial reference; parent RSS from /usr/bin/time
+candidate_t2,true,2,27.30,51.14,0.66,189,15232,2368864.71113423,5,150,127,23,0.1533333333,true,true,NONE,parallel fitness; parent RSS from /usr/bin/time
+candidate_t4,true,4,15.57,50.48,0.59,328,15264,2368864.71113423,5,150,127,23,0.1533333333,true,true,NONE,parallel fitness; parent RSS from /usr/bin/time
+candidate_t8,true,8,10.67,52.37,0.57,496,14980,2368864.71113423,5,150,127,23,0.1533333333,true,true,NONE,parallel fitness; parent RSS from /usr/bin/time
