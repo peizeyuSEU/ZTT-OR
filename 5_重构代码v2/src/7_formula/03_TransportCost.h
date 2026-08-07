@@ -51,6 +51,20 @@ public:
         return 50.0;
     }
 
+    static double getSupplierDCTransportCostPerTonne(const Instance& inst, int j) {
+        if (inst.transportCostMode == TransportCostMode::EXPLICIT_ARC_COST) {
+            return inst.supplierDcTransportCostPerTonne.at(j);
+        }
+        return costSupplierToDC(inst.a_dist.at(j));
+    }
+
+    static double getDCMarketTransportCostPerTonne(const Instance& inst, int i, int j) {
+        if (inst.transportCostMode == TransportCostMode::EXPLICIT_ARC_COST) {
+            return inst.dcMarketTransportCostPerTonne.at(i).at(j);
+        }
+        return costDCToRetailer(inst.dist.at(i).at(j));
+    }
+
     /**
      * 计算DC j服务集合S的运输成本（不含碳）
      * 供应商→DC成本 + DC→零售商成本
@@ -59,12 +73,12 @@ public:
      */
     static double transportCost(const Instance& inst, int j,
                                  const std::vector<int>& S) {
-        double costSupToDC = costSupplierToDC(inst.a_dist[j]);
+        double costSupToDC = getSupplierDCTransportCostPerTonne(inst, j);
         double total = 0.0;
 
         for (int i = 0; i < inst.numRetailer; i++) {
             if (S[i] == 1) {
-                double costDCToRet = costDCToRetailer(inst.dist[i][j]);
+                double costDCToRet = getDCMarketTransportCostPerTonne(inst, i, j);
                 total += (costSupToDC + costDCToRet) * inst.mu[i];
             }
         }
